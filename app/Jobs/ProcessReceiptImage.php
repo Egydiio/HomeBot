@@ -25,10 +25,10 @@ class ProcessReceiptImage implements ShouldQueue
     ) {}
 
     public function handle(
-        OcrService          $ocr,
-        ZApiService         $zApi,
-        ConversationState   $state,
-        ClassifyHandler     $classifier,
+        OcrService        $ocr,
+        ZApiService       $zApi,
+        ConversationState $state,
+        ClassifyHandler   $classifier,
     ): void {
         Log::info("ProcessReceiptImage: processando transação {$this->transactionId}");
 
@@ -42,17 +42,42 @@ class ProcessReceiptImage implements ShouldQueue
         // Roda o OCR
         $result = $ocr->extractFromUrl($this->imageUrl);
 
-        // OCR falhou — pede o valor manualmente
+        // OCR falhou completamente
         if (empty($result['total']) && empty($result['items'])) {
             $zApi->sendText($this->phone,
-                "⚠️ Não consegui ler a nota. Qual foi o valor total? (ex: 45,90)"
+                "⚠️ Não consegui ler o valor. Qual foi o valor total? (ex: 45,90)"
             );
             $state->setState($this->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
             $state->setData($this->phone, ['transaction_id' => $this->transactionId]);
             return;
         }
 
-        // Salva os itens na transação
+        // BILL — conta de serviço, tudo é da casa, só confirma o valor
+        if ($transaction->type === 'bill') {
+            $total = $result['total'];
+
+            $transaction->update([
+                'total_amount' => $total,
+                'status'       => 'processed',
+            ]);
+
+            $zApi->sendText($this->phone,
+                "📄 Encontrei o valor: *R$ " . number_format($total, 2, ',', '.') . "*\n\n" .
+                "Esse valor está correto?\n" .
+                "✅ *SIM* — confirmar\n" .
+                "✏️ *NÃO* — me diga o valor correto"
+            );
+
+            $state->setState($this->phone, ConversationState::STATE_WAITING_CONFIRMATION);
+            $state->setData($this->phone, [
+                'transaction_id' => $this->transactionId,
+                'type'           => 'bill',
+            ]);
+
+            return;
+        }
+
+        // RECEIPT — nota fiscal, classifica itens
         $transaction->update([
             'total_amount' => $result['total'],
             'status'       => 'processed',
@@ -67,7 +92,6 @@ class ProcessReceiptImage implements ShouldQueue
             ]);
         }
 
-        // Passa pro ClassifyHandler mostrar os itens pro usuário confirmar
         $classifier->handle($transaction);
     }
 

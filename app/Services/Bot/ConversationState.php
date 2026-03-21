@@ -11,6 +11,7 @@ class ConversationState
     const STATE_WAITING_CLASSIFICATION = 'waiting_classification';
     const STATE_WAITING_CONFIRMATION   = 'waiting_confirmation';
     const STATE_WAITING_MANUAL_VALUE   = 'waiting_manual_value';
+    const STATE_WAITING_IMAGE_TYPE = 'waiting_image_type';
 
     // Tempo de expiração do estado — 30 minutos
     const TTL = 1800;

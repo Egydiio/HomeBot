@@ -7,6 +7,7 @@ use App\Services\Bot\Handlers\ClassifyHandler;
 use App\Services\Bot\Handlers\HelpHandler;
 use App\Services\Bot\Handlers\ReceiptHandler;
 use App\Services\Bot\Handlers\BalanceHandler;
+use App\Services\Bot\Handlers\BillHandler;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
@@ -17,6 +18,7 @@ class BotRouter
         protected HelpHandler       $helpHandler,
         protected ReceiptHandler    $receiptHandler,
         protected ClassifyHandler   $classifyHandler,
+        protected BillHandler       $billHandler,
     ) {}
 
     /**
@@ -56,20 +58,40 @@ class BotRouter
             ConversationState::STATE_WAITING_CONFIRMATION
             => $this->handleConfirmation($member, $message),
 
+            ConversationState::STATE_WAITING_IMAGE_TYPE
+            => $this->handleImageType($member, $message),
+
             default => $this->helpHandler->handle($member),
         };
     }
 
-    // Estado idle — usuário não está no meio de nada
+    // Atualiza o handleIdle para detectar o tipo de imagem
     private function handleIdle(Member $member, string $message, ?array $media): void
     {
-        // Recebeu imagem — dispara o fluxo de nota fiscal
         if ($media && $media['type'] === 'image') {
-            $this->receiptHandler->handle($member, $media);
+            $caption = strtolower($media['caption'] ?? '');
+
+            // Se o caption mencionar conta, luz, água, internet — trata como bill
+            $billKeywords = ['conta', 'luz', 'água', 'agua', 'internet', 'gas', 'gás', 'aluguel'];
+            $isBill = collect($billKeywords)->contains(fn($k) => str_contains($caption, $k));
+
+            if ($isBill) {
+                $this->billHandler->handle($member, $media);
+                return;
+            }
+
+            // Sem caption específico — pergunta o tipo
+            $this->zApi()->sendText($member->phone,
+                "📸 Recebi a imagem! O que é isso?\n\n" .
+                "1️⃣ *NOTA* — nota fiscal do mercado\n" .
+                "2️⃣ *CONTA* — conta de luz, água, internet"
+            );
+
+            $this->state->setState($member->phone, 'waiting_image_type');
+            $this->state->setData($member->phone, ['media' => $media]);
             return;
         }
 
-        // Texto sem contexto — mostra ajuda
         $this->helpHandler->handle($member);
     }
 
@@ -184,6 +206,36 @@ class BotRouter
         // Resposta não reconhecida
         $this->zApi()->sendText($member->phone,
             "Responda *SIM* para confirmar ou *CORRIGIR* para ajustar algum item."
+        );
+    }
+
+    private function handleImageType(Member $member, string $message): void
+    {
+        $text = trim($message);
+        $data = $this->state->getData($member->phone);
+
+        if (!$data || !isset($data['media'])) {
+            $this->state->clear($member->phone);
+            $this->helpHandler->handle($member);
+            return;
+        }
+
+        $media = $data['media'];
+
+        if (in_array($text, ['1', 'nota', 'mercado', 'supermercado'])) {
+            $this->state->clear($member->phone);
+            $this->receiptHandler->handle($member, $media);
+            return;
+        }
+
+        if (in_array($text, ['2', 'conta', 'luz', 'água', 'agua', 'internet'])) {
+            $this->state->clear($member->phone);
+            $this->billHandler->handle($member, $media);
+            return;
+        }
+
+        $this->zApi()->sendText($member->phone,
+            "Responda *1* para nota fiscal ou *2* para conta de serviço."
         );
     }
 
