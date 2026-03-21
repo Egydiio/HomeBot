@@ -6,6 +6,8 @@ use App\Models\Member;
 use App\Services\Bot\Handlers\ClassifyHandler;
 use App\Services\Bot\Handlers\HelpHandler;
 use App\Services\Bot\Handlers\ReceiptHandler;
+use App\Services\Bot\Handlers\BalanceHandler;
+use Exception;
 use Illuminate\Support\Facades\Log;
 
 class BotRouter
@@ -17,6 +19,9 @@ class BotRouter
         protected ClassifyHandler   $classifyHandler,
     ) {}
 
+    /**
+     * @throws Exception
+     */
     public function handle(Member $member, string $message, ?array $media): void
     {
         $phone        = $member->phone;
@@ -29,6 +34,11 @@ class BotRouter
         if (in_array($text, ['ajuda', 'help', 'oi', 'ola', 'olá', 'menu'])) {
             $this->state->clear($phone);
             $this->helpHandler->handle($member);
+            return;
+        }
+
+        if (in_array($text, ['saldo', 'balanço', 'balanco', 'quanto devo'])) {
+            app(BalanceHandler::class)->handle($member);
             return;
         }
 
