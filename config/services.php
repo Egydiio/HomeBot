@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'google_vision' => [
+        'key_path' => env('GOOGLE_VISION_KEY_PATH', storage_path('app/google-vision.json')),
+    ],
+
+    'openai' => [
+        'key' => env('OPENAI_API_KEY', ''),
+    ],
+
 ];
