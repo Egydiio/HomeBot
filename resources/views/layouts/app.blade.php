@@ -48,7 +48,17 @@
     </nav>
 
     {{-- Footer --}}
-    <div class="mt-auto pt-4 border-t border-white/[0.07] px-3">
+    <div class="mt-auto pt-4 border-t border-white/[0.07] px-3 flex flex-col gap-3">
+        @auth
+        <form method="POST" action="{{ route('logout') }}">
+            @csrf
+            <button type="submit"
+                    class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] text-white/40 hover:bg-white/5 hover:text-white/80 transition-all text-left">
+                <span class="w-5 text-center text-sm">⏻</span>
+                Sair
+            </button>
+        </form>
+        @endauth
         <p class="text-[11px] text-white/20">HomeBot v1.0</p>
     </div>
 </aside>
