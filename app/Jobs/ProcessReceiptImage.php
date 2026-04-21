@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
 use App\Services\Bot\Handlers\ClassifyHandler;
-use App\Services\OcrService;
+use App\Services\ReceiptClassificationPipeline;
 use App\Services\ZApiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -16,7 +16,7 @@ class ProcessReceiptImage implements ShouldQueue
     use Queueable;
 
     public int $tries   = 3;
-    public int $timeout = 120;
+    public int $timeout = 180;
 
     public function __construct(
         public readonly int    $transactionId,
@@ -25,10 +25,10 @@ class ProcessReceiptImage implements ShouldQueue
     ) {}
 
     public function handle(
-        OcrService        $ocr,
-        ZApiService       $zApi,
-        ConversationState $state,
-        ClassifyHandler   $classifier,
+        ReceiptClassificationPipeline $pipeline,
+        ZApiService                   $zApi,
+        ConversationState             $state,
+        ClassifyHandler               $classifier,
     ): void {
         Log::info("ProcessReceiptImage: processando transação {$this->transactionId}");
 
@@ -39,20 +39,19 @@ class ProcessReceiptImage implements ShouldQueue
             return;
         }
 
-        // Roda o OCR
-        $result = $ocr->extractFromUrl($this->imageUrl);
+        $result = $pipeline->process($this->imageUrl);
 
-        // OCR falhou completamente
-        if (empty($result['total']) && empty($result['items'])) {
+        // Pipeline falhou completamente — pede valor manual
+        if (empty($result['classified']) && empty($result['ambiguous'])) {
             $zApi->sendText($this->phone,
-                "⚠️ Não consegui ler o valor. Qual foi o valor total? (ex: 45,90)"
+                "⚠️ Não consegui ler a nota. Qual foi o valor total? (ex: 45,90)"
             );
             $state->setState($this->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
             $state->setData($this->phone, ['transaction_id' => $this->transactionId]);
             return;
         }
 
-        // BILL — conta de serviço, tudo é da casa, só confirma o valor
+        // BILL — tudo da casa, só confirma o valor
         if ($transaction->type === 'bill') {
             $total = $result['total'];
 
@@ -77,13 +76,13 @@ class ProcessReceiptImage implements ShouldQueue
             return;
         }
 
-        // RECEIPT — nota fiscal, classifica itens
+        // RECEIPT — persiste itens classificados
         $transaction->update([
             'total_amount' => $result['total'],
             'status'       => 'processed',
         ]);
 
-        foreach ($result['items'] as $item) {
+        foreach ($result['classified'] as $item) {
             $transaction->items()->create([
                 'name'      => $item['name'],
                 'value'     => $item['value'],
@@ -92,6 +91,29 @@ class ProcessReceiptImage implements ShouldQueue
             ]);
         }
 
+        // Itens ambíguos: salva no Redis e pergunta ao usuário um por vez
+        if (!empty($result['ambiguous'])) {
+            $state->setState($this->phone, ConversationState::STATE_WAITING_ITEM_CLASSIFICATION);
+            $state->setData($this->phone, [
+                'transaction_id' => $this->transactionId,
+                'pending_items'  => $result['ambiguous'],
+            ]);
+
+            $first = $result['ambiguous'][0];
+            $remaining = count($result['ambiguous']);
+            $suffix = $remaining > 1 ? " (+{$remaining} mais)" : '';
+
+            $zApi->sendText($this->phone,
+                "🛒 *{$first['name']}*{$suffix}\n\n" .
+                "Essa compra é:\n" .
+                "1️⃣ Despesa da *casa*\n" .
+                "2️⃣ Despesa *pessoal*"
+            );
+
+            return;
+        }
+
+        // Tudo classificado — mostra resumo
         $classifier->handle($transaction);
     }
 

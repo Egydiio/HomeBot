@@ -57,6 +57,18 @@ services:
     networks:
       - homebot
 
+  paddleocr:
+    build:
+      context: ./docker/paddleocr
+    container_name: homebot_paddleocr
+    restart: unless-stopped
+    ports:
+      - "8866:8866"
+    volumes:
+      - paddleocr_models:/root/.paddleocr
+    networks:
+      - homebot
+
   queue:
     build:
       context: .
@@ -96,3 +108,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  paddleocr_models:
