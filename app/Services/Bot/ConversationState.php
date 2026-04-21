@@ -7,11 +7,12 @@ use Illuminate\Support\Facades\Redis;
 class ConversationState
 {
     // Estados possíveis da conversa
-    const STATE_IDLE                  = 'idle';
-    const STATE_WAITING_CLASSIFICATION = 'waiting_classification';
-    const STATE_WAITING_CONFIRMATION   = 'waiting_confirmation';
-    const STATE_WAITING_MANUAL_VALUE   = 'waiting_manual_value';
-    const STATE_WAITING_IMAGE_TYPE = 'waiting_image_type';
+    const STATE_IDLE                       = 'idle';
+    const STATE_WAITING_CLASSIFICATION     = 'waiting_classification';
+    const STATE_WAITING_CONFIRMATION       = 'waiting_confirmation';
+    const STATE_WAITING_MANUAL_VALUE       = 'waiting_manual_value';
+    const STATE_WAITING_IMAGE_TYPE         = 'waiting_image_type';
+    const STATE_WAITING_ITEM_CLASSIFICATION = 'waiting_item_classification';
 
     // Tempo de expiração do estado — 30 minutos
     const TTL = 1800;

@@ -54,8 +54,93 @@ class OcrProcessorService
         ];
     }
 
+    /**
+     * Parse raw OCR text into structured item arrays for the classification pipeline.
+     * Returns: [['name' => string, 'value' => float, 'qty' => float|null]]
+     */
+    public function extractStructuredItems(string $rawText): array
+    {
+        $lines = $this->extractAndNormalizeLines($rawText);
+        $items = [];
+
+        foreach ($lines as $line) {
+            $item = $this->parseLineToItem($line);
+            if ($item !== null) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Parse a single normalized product line into a structured item.
+     * Handles weight sales (1.500KG X 12.99) and regular items (LEITE 3.99).
+     */
+    private function parseLineToItem(string $line): ?array
+    {
+        // Remove EAN-13 barcode
+        $line = preg_replace('/\b\d{13}\b/', '', $line);
+
+        $name = $line;
+        $qty  = null;
+        $value = null;
+
+        // Weight sale: {weight}KG X {unitPrice}
+        if (preg_match('/(\d+[.,]?\d+)\s*KG\s+X\s+(\d+[.,]?\d{2})/i', $line, $m)) {
+            $weight = floatval(str_replace(',', '.', $m[1]));
+            $unit   = floatval(str_replace(',', '.', $m[2]));
+            $value  = round($weight * $unit, 2);
+            $qty    = $weight;
+            $name   = preg_replace('/' . preg_quote($m[0], '/') . '/i', '', $name);
+        }
+        // Quantity × unit price: 2 X 3.99 or 2 x 3.99
+        elseif (preg_match('/(\d+)\s*X\s*(\d+[.,]?\d{2})/i', $line, $m)) {
+            $qty   = (float) $m[1];
+            $unit  = floatval(str_replace(',', '.', $m[2]));
+            $value = round($qty * $unit, 2);
+            $name  = preg_replace('/' . preg_quote($m[0], '/') . '/i', '', $name);
+        }
+
+        // If no structured price found, grab the last decimal number as total
+        if ($value === null) {
+            preg_match_all('/\d+[.,]\d{2}/', $line, $allPrices);
+            $prices = $allPrices[0] ?? [];
+            if (empty($prices)) {
+                return null;
+            }
+            $value = floatval(str_replace(',', '.', end($prices)));
+            // Remove all price-like numbers from name
+            foreach ($prices as $p) {
+                $name = str_replace($p, '', $name);
+            }
+        }
+
+        if ($value <= 0) {
+            return null;
+        }
+
+        // Clean up the extracted name
+        $name = preg_replace('/\b\d+[.,]?\d*\b/', '', $name); // remaining standalone numbers
+        $name = preg_replace('/\bKG\b/i', '', $name);
+        $name = preg_replace('/\bUN\b/i', '', $name);
+        $name = preg_replace('/[\-\*\.•]+/', ' ', $name);
+        $name = preg_replace('/\s+/', ' ', $name);
+        $name = trim($name);
+
+        if (mb_strlen($name) < 2) {
+            return null;
+        }
+
+        return [
+            'name'  => $name,
+            'value' => $value,
+            'qty'   => $qty,
+        ];
+    }
+
     // Split raw text into candidate item lines, remove header/footer and normalize numbers
-    private function extractAndNormalizeLines(string $rawText): array
+    public function extractAndNormalizeLines(string $rawText): array
     {
         // Normalize unicode spaces (NBSP, zero-width spaces, unicode space separators) to regular space
         $rawText = preg_replace('/[\x{00A0}\x{200B}\p{Zs}]+/u', ' ', $rawText);

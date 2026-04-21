@@ -8,17 +8,19 @@ use App\Services\Bot\Handlers\HelpHandler;
 use App\Services\Bot\Handlers\ReceiptHandler;
 use App\Services\Bot\Handlers\BalanceHandler;
 use App\Services\Bot\Handlers\BillHandler;
+use App\Services\RuleBasedClassifierService;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
 class BotRouter
 {
     public function __construct(
-        protected ConversationState $state,
-        protected HelpHandler       $helpHandler,
-        protected ReceiptHandler    $receiptHandler,
-        protected ClassifyHandler   $classifyHandler,
-        protected BillHandler       $billHandler,
+        protected ConversationState        $state,
+        protected HelpHandler              $helpHandler,
+        protected ReceiptHandler           $receiptHandler,
+        protected ClassifyHandler          $classifyHandler,
+        protected BillHandler              $billHandler,
+        protected RuleBasedClassifierService $rules,
     ) {}
 
     /**
@@ -60,6 +62,9 @@ class BotRouter
 
             ConversationState::STATE_WAITING_IMAGE_TYPE
             => $this->handleImageType($member, $message),
+
+            ConversationState::STATE_WAITING_ITEM_CLASSIFICATION
+            => $this->handleItemClassification($member, $message),
 
             default => $this->helpHandler->handle($member),
         };
@@ -237,6 +242,75 @@ class BotRouter
         $this->zApi()->sendText($member->phone,
             "Responda *1* para nota fiscal ou *2* para conta de serviço."
         );
+    }
+
+    // Usuário está classificando itens ambíguos um por um (responde 1 ou 2)
+    private function handleItemClassification(Member $member, string $message): void
+    {
+        $text = trim($message);
+        $data = $this->state->getData($member->phone);
+
+        if (!$data || !isset($data['transaction_id'], $data['pending_items'])) {
+            $this->state->clear($member->phone);
+            $this->helpHandler->handle($member);
+            return;
+        }
+
+        $category = match ($text) {
+            '1', 'casa'     => 'house',
+            '2', 'pessoal'  => 'personal',
+            default         => null,
+        };
+
+        if ($category === null) {
+            $current = $data['pending_items'][0];
+            $this->zApi()->sendText($member->phone,
+                "Responda *1* para casa ou *2* para pessoal.\n\n" .
+                "Item: *{$current['name']}*"
+            );
+            return;
+        }
+
+        $transaction = \App\Models\Transaction::find($data['transaction_id']);
+
+        if (!$transaction) {
+            $this->state->clear($member->phone);
+            return;
+        }
+
+        // Salva o item classificado pelo usuário
+        $item = array_shift($data['pending_items']);
+        $transaction->items()->create([
+            'name'      => $item['name'],
+            'value'     => $item['value'],
+            'category'  => $category,
+            'confirmed' => true,
+        ]);
+
+        // Ensina o classificador para evitar perguntar novamente
+        $this->rules->learn($item['name'], $category, 'user', 100);
+
+        // Ainda há itens pendentes — pergunta o próximo
+        if (!empty($data['pending_items'])) {
+            $this->state->setData($member->phone, $data);
+
+            $next      = $data['pending_items'][0];
+            $remaining = count($data['pending_items']);
+            $suffix    = $remaining > 1 ? " (+{$remaining} mais)" : '';
+
+            $this->zApi()->sendText($member->phone,
+                "🛒 *{$next['name']}*{$suffix}\n\n" .
+                "Essa compra é:\n" .
+                "1️⃣ Despesa da *casa*\n" .
+                "2️⃣ Despesa *pessoal*"
+            );
+
+            return;
+        }
+
+        // Todos os itens classificados — mostra resumo
+        $this->state->clear($member->phone);
+        $this->classifyHandler->handle($transaction->fresh(['items']));
     }
 
     private function parseMoneyValue(string $message): ?float

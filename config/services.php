@@ -35,8 +35,8 @@ return [
         ],
     ],
 
-    'google_vision' => [
-        'key_path' => env('GOOGLE_VISION_KEY_PATH', storage_path('app/google-vision.json')),
+    'paddleocr' => [
+        'endpoint' => env('PADDLEOCR_ENDPOINT', 'http://paddleocr:8866'),
     ],
 
     'openai' => [
