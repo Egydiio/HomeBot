@@ -12,7 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'zapi.signature' => \App\Http\Middleware\VerifyZapiSignature::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

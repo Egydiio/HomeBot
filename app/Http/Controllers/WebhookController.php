@@ -14,7 +14,7 @@ class WebhookController extends Controller
 
     public function handle(Request $request): JsonResponse
     {
-        Log::info('Webhook recebido', $request->all());
+        Log::info('Webhook recebido', ['type' => $request->input('type'), 'has_image' => $request->has('image')]);
 
         // Z-API envia vários tipos de evento — só queremos mensagens
         if (!$this->isValidMessage($request)) {
@@ -46,9 +46,9 @@ class WebhookController extends Controller
     private function isValidMessage(Request $request): bool
     {
         // Ignora mensagens do próprio bot, status e grupos
-        //if ($request->boolean('fromMe'))    return false;
-        //if ($request->boolean('isGroup'))   return false;
-        //if ($request->input('type') === 'ReceivedCallback') return false;
+        if ($request->boolean('fromMe'))    return false;
+        if ($request->boolean('isGroup'))   return false;
+        if ($request->input('type') === 'ReceivedCallback') return false;
 
         return $request->has('phone');
     }

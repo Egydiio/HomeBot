@@ -47,4 +47,8 @@ return [
         'access_token' => env('MERCADOPAGO_ACCESS_TOKEN', ''),
     ],
 
+    'llama' => [
+        'endpoint' => env('LLAMA_ENDPOINT', 'http://localhost:4891'),
+    ],
+
 ];

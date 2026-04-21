@@ -66,6 +66,7 @@ class BalanceService
             ->where('debtor_id', $creditorId)
             ->where('creditor_id', $debtorId)
             ->where('reference_month', $month)
+            ->lockForUpdate()
             ->first();
 
         if ($inverse) {
@@ -101,7 +102,7 @@ class BalanceService
                 'reference_month' => $month,
             ],
             [
-                'amount' => DB::raw("amount + {$amount}"),
+                'amount' => DB::raw('amount + ' . floatval($amount)),
             ]
         );
     }
