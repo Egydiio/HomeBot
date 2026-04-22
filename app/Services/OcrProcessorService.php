@@ -129,6 +129,7 @@ class OcrProcessorService
 
         $cleanLines = [];
         $started = false;
+        $pendingSeed = null;
 
         foreach ($lines as $rawLine) {
             $line = preg_replace('/[\x{00A0}\x{200B}\t]+/u', ' ', $rawLine);
@@ -151,8 +152,33 @@ class OcrProcessorService
                 continue;
             }
 
+            if ($pendingSeed !== null) {
+                if ($this->isLikelyPriceOnlyLine($line) || $this->isLikelyReceiptItemLine($line)) {
+                    $merged = trim($pendingSeed . ' ' . $line);
+                    if ($this->isLikelyReceiptItemLine($merged)) {
+                        $cleanLines[] = $merged;
+                        $pendingSeed = null;
+                        $started = true;
+                        continue;
+                    }
+                }
+
+                if ($this->isLikelyContinuationLine($line)) {
+                    $pendingSeed = trim($pendingSeed . ' ' . $line);
+                    continue;
+                }
+
+                $pendingSeed = null;
+            }
+
             if ($this->isLikelyReceiptItemLine($line)) {
                 $cleanLines[] = $line;
+                $started = true;
+                continue;
+            }
+
+            if ($this->isLikelyItemSeedLine($line)) {
+                $pendingSeed = $line;
                 $started = true;
                 continue;
             }
@@ -525,6 +551,44 @@ class OcrProcessorService
         }
 
         return $priceCount >= 1 && preg_match('/\d+[.,]\d{2}\s*$/', $line) === 1;
+    }
+
+    private function isLikelyItemSeedLine(string $line): bool
+    {
+        if ($this->isHeaderNoiseLine($line) || $this->isFooterLine($line)) {
+            return false;
+        }
+
+        if (preg_match('/\d+[.,]\d{2}/', $line)) {
+            return false;
+        }
+
+        $hasEan = preg_match('/\b\d{13}\b/', $line) === 1;
+        $hasPluLikeCode = preg_match('/^\s*\d{3,6}[A-Z]?\b/u', $line) === 1;
+        $hasAlphaWord = preg_match('/[A-Za-zÀ-ÖØ-öø-ÿ]{3,}/u', $line) === 1;
+        $looksLikeStoreLine = preg_match('/\b(supermercado|mercearia|atacado|varejo|emitente)\b/i', $line) === 1;
+
+        return $hasAlphaWord && !$looksLikeStoreLine && ($hasEan || $hasPluLikeCode);
+    }
+
+    private function isLikelyPriceOnlyLine(string $line): bool
+    {
+        if ($this->isHeaderNoiseLine($line) || $this->isFooterLine($line)) {
+            return false;
+        }
+
+        if (preg_match('/(\d+[.,]?\d+)\s*kg\s*(?:x|X|×)\s*(\d+[.,]?\d{2})/i', $line)) {
+            return true;
+        }
+
+        if (preg_match('/\b\d+\s*[xX]\s*\d+[.,]\d{2}\b/', $line)) {
+            return true;
+        }
+
+        $priceCount = preg_match_all('/\d+[.,]\d{2}/', $line, $matches);
+        $hasOnlyPriceTokens = preg_match('/^[\d\s.,xXkgKG\/-]+$/u', $line) === 1;
+
+        return $priceCount >= 1 && $hasOnlyPriceTokens;
     }
 
     private function isLikelyContinuationLine(string $line): bool
