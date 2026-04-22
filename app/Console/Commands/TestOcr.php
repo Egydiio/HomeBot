@@ -18,9 +18,20 @@ class TestOcr extends Command
     public function handle()
     {
         $path = $this->argument('path') ?? storage_path('app/teste.jpeg');
+        $credentialsPath = config('services.google_vision.key_path');
 
         $this->info("🔍 Testando OCR...");
         $this->line("📂 Fonte: {$path}");
+
+        if (!is_string($credentialsPath) || trim($credentialsPath) === '') {
+            $this->error('❌ GOOGLE_VISION_KEY_PATH não está configurado.');
+            return self::FAILURE;
+        }
+
+        if (!is_file($credentialsPath) || !is_readable($credentialsPath)) {
+            $this->error("❌ Arquivo de credenciais do Google Vision indisponível: {$credentialsPath}");
+            return self::FAILURE;
+        }
 
         /** @var OcrService $ocr */
         $ocr = app(OcrService::class);
@@ -30,7 +41,7 @@ class TestOcr extends Command
 
         try {
             $client = new ImageAnnotatorClient([
-                'credentials' => config('services.google_vision.key_path'),
+                'credentials' => $credentialsPath,
             ]);
 
             $imageContent = str_starts_with($path, 'http')
@@ -68,7 +79,7 @@ class TestOcr extends Command
 
         } catch (\Throwable $e) {
             $this->error("❌ Erro no Vision: " . $e->getMessage());
-            return;
+            return self::FAILURE;
         }
 
         // Agora prepara as linhas que iremos enviar para a IA local (Llama)
@@ -136,5 +147,6 @@ class TestOcr extends Command
         }
 
         $this->line("\n✅ Teste finalizado.");
+        return self::SUCCESS;
     }
 }

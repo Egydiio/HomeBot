@@ -7,6 +7,36 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## HomeBot
+
+HomeBot é um SaaS de gestão financeira doméstica via WhatsApp. O bot recebe nota ou conta, registra a despesa, atualiza saldo entre moradores e fecha o mês com cobrança Pix.
+
+### Integrações principais
+
+- `GOOGLE_VISION_KEY_PATH`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
+- `MERCADOPAGO_ACCESS_TOKEN`
+- `MERCADOPAGO_BASE_URL`
+- `ZAPI_INSTANCE`
+- `ZAPI_TOKEN`
+- `ZAPI_CLIENT_TOKEN`
+- `ZAPI_WEBHOOK_SECRET`
+
+### Comportamento sem credenciais
+
+- sem credencial do Google Vision, `OcrService` retorna resultado vazio sem quebrar o fluxo
+- sem `OPENAI_API_KEY`, a classificação remota é pulada
+- sem `MERCADOPAGO_ACCESS_TOKEN`, o sistema usa apenas a chave Pix manual como fallback
+
+### Testes úteis
+
+```bash
+docker compose exec -T app php artisan test tests/Unit/IntegrationConfigTest.php
+docker compose exec -T app php artisan test tests/Feature/BotRouterTest.php
+```
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

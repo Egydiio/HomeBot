@@ -30,27 +30,7 @@ use Illuminate\Support\Facades\Log;
 
 class OcrService
 {
-    private ImageAnnotatorClient $client;
-
-    public function __construct()
-    {
-        // Algumas versões do client do Google Vision disparam warnings/deprecations
-        // internos (vendor) que poluem a saída no runtime (ex: PHP 8.4). Para evitar
-        // que essas mensagens quebrem fluxos interativos/CLI, suprimimos
-        // temporariamente E_DEPRECATED/E_USER_DEPRECATED durante a construção.
-        $oldLevel = error_reporting();
-        $suppressMask = E_DEPRECATED
-            | (defined('E_USER_DEPRECATED') ? E_USER_DEPRECATED : 0)
-            | (defined('E_USER_ERROR') ? E_USER_ERROR : 0);
-        try {
-            error_reporting($oldLevel & ~$suppressMask);
-            $this->client = new ImageAnnotatorClient([
-                'credentials' => config('services.google_vision.key_path'),
-            ]);
-        } finally {
-            error_reporting($oldLevel);
-        }
-    }
+    private ?ImageAnnotatorClient $client = null;
 
     // Método principal — recebe URL da imagem e retorna itens extraídos
     public function extractFromUrl(string $imageUrl): array
@@ -74,7 +54,7 @@ class OcrService
 
             // Preparar headers opcionais (ex: uso com Z-API) sem forçar sua existência
             $optionalHeaders = [];
-            if ($token = config('services.zapi.client_token')) {
+            if ($token = config('zapi.client_token')) {
                 $optionalHeaders['Client-Token'] = $token;
             }
 
@@ -114,6 +94,12 @@ class OcrService
 
     private function sendToVisionAndParse(string $imageContent): array
     {
+        $client = $this->getClient();
+
+        if (!$client) {
+            return $this->emptyResult();
+        }
+
         $oldLevel = error_reporting();
         $suppressMask = E_DEPRECATED
             | (defined('E_USER_DEPRECATED') ? E_USER_DEPRECATED : 0)
@@ -135,7 +121,7 @@ class OcrService
             $batchReq = new BatchAnnotateImagesRequest();
             $batchReq->setRequests([$annotateReq]);
 
-            $response = $this->client->batchAnnotateImages($batchReq);
+            $response = $client->batchAnnotateImages($batchReq);
         } finally {
             error_reporting($oldLevel);
         }
@@ -256,5 +242,47 @@ class OcrService
             'total' => null,
             'items' => [],
         ];
+    }
+
+    private function getClient(): ?ImageAnnotatorClient
+    {
+        if ($this->client !== null) {
+            return $this->client;
+        }
+
+        $credentialsPath = config('services.google_vision.key_path');
+
+        if (!is_string($credentialsPath) || trim($credentialsPath) === '') {
+            Log::warning('OCR: GOOGLE_VISION_KEY_PATH não configurado');
+            return null;
+        }
+
+        if (!is_file($credentialsPath) || !is_readable($credentialsPath)) {
+            Log::warning('OCR: arquivo de credenciais do Google Vision não encontrado ou sem leitura', [
+                'path' => $credentialsPath,
+            ]);
+            return null;
+        }
+
+        $oldLevel = error_reporting();
+        $suppressMask = E_DEPRECATED
+            | (defined('E_USER_DEPRECATED') ? E_USER_DEPRECATED : 0)
+            | (defined('E_USER_ERROR') ? E_USER_ERROR : 0);
+
+        try {
+            error_reporting($oldLevel & ~$suppressMask);
+            $this->client = new ImageAnnotatorClient([
+                'credentials' => $credentialsPath,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('OCR: falha ao inicializar cliente do Google Vision', [
+                'message' => $e->getMessage(),
+            ]);
+            return null;
+        } finally {
+            error_reporting($oldLevel);
+        }
+
+        return $this->client;
     }
 }
