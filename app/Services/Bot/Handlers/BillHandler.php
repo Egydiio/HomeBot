@@ -3,47 +3,58 @@
 namespace App\Services\Bot\Handlers;
 
 use App\Jobs\ProcessReceiptImage;
+use App\Models\Member;
 use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
+use App\Services\ReceiptImageGuardService;
 use App\Services\ZApiService;
 
 class BillHandler
 {
     public function __construct(
-        protected ZApiService       $zApi,
+        protected ZApiService $zApi,
         protected ConversationState $state,
+        protected ReceiptImageGuardService $imageGuard,
     ) {}
 
-    public function handle(\App\Models\Member $member, array $media): void
+    public function handle(Member $member, array $media): void
     {
-        // Avisa que recebeu
-        $this->zApi->sendText($member->phone,
-            "📄 Recebi a conta! Estou lendo o valor, aguarde... ⏳"
-        );
-
-        // Cria a transação como bill
         $transaction = Transaction::create([
-            'group_id'        => $member->group_id,
-            'member_id'       => $member->id,
-            'type'            => 'bill',
-            'description'     => 'Conta da casa',
-            'total_amount'    => 0,
-            'house_amount'    => 0,
-            'receipt_image'   => $media['url'],
-            'status'          => 'pending',
+            'group_id' => $member->group_id,
+            'member_id' => $member->id,
+            'type' => 'bill',
+            'description' => 'Conta da casa',
+            'total_amount' => 0,
+            'house_amount' => 0,
+            'receipt_image' => $media['url'] ?? null,
+            'status' => 'pending',
             'reference_month' => now()->startOfMonth(),
         ]);
 
-        // Salva o estado
+        if ($this->imageGuard->validateIncomingMedia($media) !== null) {
+            $this->state->setState($member->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
+            $this->state->setData($member->phone, [
+                'transaction_id' => $transaction->id,
+                'type' => 'bill',
+            ]);
+
+            $this->zApi->sendText($member->phone,
+                '⚠️ A imagem nao parece valida para OCR. Me manda o valor da conta, por exemplo: *145,90*'
+            );
+
+            return;
+        }
+
+        $this->zApi->sendText($member->phone,
+            '📄 Recebi a conta! Estou lendo o valor, aguarde... ⏳'
+        );
+
         $this->state->setState($member->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
         $this->state->setData($member->phone, [
             'transaction_id' => $transaction->id,
-            'type'           => 'bill',
+            'type' => 'bill',
         ]);
 
-        // Tenta OCR para extrair o valor
-        // Contas de luz/água/internet têm layout diferente de nota fiscal
-        // Por isso pedimos confirmação do valor mesmo com OCR
         ProcessReceiptImage::dispatch(
             $transaction->id,
             $media['url'],

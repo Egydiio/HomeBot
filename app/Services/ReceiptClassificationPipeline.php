@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ReceiptClassificationPipeline
 {
     public function __construct(
+        private ReceiptImageGuardService $imageGuard,
         private PaddleOcrService $ocr,
         private OcrProcessorService $processor,
         private RuleBasedClassifierService $rules,
@@ -14,7 +16,7 @@ class ReceiptClassificationPipeline
     ) {}
 
     /**
-     * Full pipeline: image URL → classified + ambiguous items.
+     * Full pipeline: image URL -> classified + ambiguous items.
      *
      * Returns:
      * [
@@ -25,7 +27,48 @@ class ReceiptClassificationPipeline
      */
     public function process(string $imageUrl): array
     {
-        $rawText = $this->ocr->extractTextFromUrl($imageUrl);
+        $cachedFromUrl = Cache::get($this->urlCacheKey($imageUrl));
+        if (is_array($cachedFromUrl)) {
+            Log::info('ReceiptClassificationPipeline: resultado retornado do cache por URL');
+            return $cachedFromUrl;
+        }
+
+        $image = $this->imageGuard->fetchValidatedImage($imageUrl);
+        if ($image === null) {
+            Log::warning('ReceiptClassificationPipeline: imagem rejeitada antes do OCR');
+            return $this->empty();
+        }
+
+        $hashCacheKey = $this->hashCacheKey($image['hash']);
+        $cachedFromHash = Cache::get($hashCacheKey);
+        if (is_array($cachedFromHash)) {
+            Cache::put($this->urlCacheKey($imageUrl), $cachedFromHash, now()->addSeconds($this->imageGuard->cacheTtlSeconds()));
+            Log::info('ReceiptClassificationPipeline: resultado retornado do cache por hash');
+            return $cachedFromHash;
+        }
+
+        return $this->runWithLock($image['hash'], function () use ($imageUrl, $image, $hashCacheKey) {
+            $cached = Cache::get($hashCacheKey);
+            if (is_array($cached)) {
+                Cache::put($this->urlCacheKey($imageUrl), $cached, now()->addSeconds($this->imageGuard->cacheTtlSeconds()));
+                return $cached;
+            }
+
+            $result = $this->processImageContent($image['content']);
+
+            if ($this->shouldCache($result)) {
+                $ttl = now()->addSeconds($this->imageGuard->cacheTtlSeconds());
+                Cache::put($hashCacheKey, $result, $ttl);
+                Cache::put($this->urlCacheKey($imageUrl), $result, $ttl);
+            }
+
+            return $result;
+        });
+    }
+
+    private function processImageContent(string $imageContent): array
+    {
+        $rawText = $this->ocr->extractTextFromContent($imageContent);
 
         if (empty($rawText)) {
             Log::warning('ReceiptClassificationPipeline: OCR retornou texto vazio');
@@ -35,7 +78,7 @@ class ReceiptClassificationPipeline
         $items = $this->processor->extractStructuredItems($rawText);
 
         if (empty($items)) {
-            Log::warning('ReceiptClassificationPipeline: nenhum item extraído do texto');
+            Log::warning('ReceiptClassificationPipeline: nenhum item extraido do texto');
             return $this->empty();
         }
 
@@ -49,27 +92,58 @@ class ReceiptClassificationPipeline
         }
 
         $total = array_sum(array_map(
-            fn($i) => $i['value'],
+            fn ($item) => $item['value'],
             array_merge($classified, $ambiguous)
         ));
 
-        Log::info('ReceiptClassificationPipeline: concluído', [
+        Log::info('ReceiptClassificationPipeline: concluido', [
             'classified' => count($classified),
-            'ambiguous'  => count($ambiguous),
-            'total'      => $total,
+            'ambiguous' => count($ambiguous),
+            'total' => $total,
         ]);
 
         return [
             'classified' => $classified,
-            'ambiguous'  => $ambiguous,
-            'total'      => $total > 0 ? round($total, 2) : null,
+            'ambiguous' => $ambiguous,
+            'total' => $total > 0 ? round($total, 2) : null,
         ];
+    }
+
+    private function shouldCache(array $result): bool
+    {
+        return !empty($result['classified'])
+            || !empty($result['ambiguous'])
+            || $result['total'] !== null;
+    }
+
+    private function urlCacheKey(string $imageUrl): string
+    {
+        return 'receipt_pipeline:url:' . sha1($imageUrl);
+    }
+
+    private function hashCacheKey(string $hash): string
+    {
+        return 'receipt_pipeline:image:' . $hash;
+    }
+
+    private function runWithLock(string $hash, callable $callback): array
+    {
+        try {
+            return Cache::lock('receipt_pipeline:lock:' . $hash, 30)
+                ->block(5, $callback);
+        } catch (\Throwable $exception) {
+            Log::warning('ReceiptClassificationPipeline: lock indisponivel, seguindo sem lock', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return $callback();
+        }
     }
 
     private function applyRules(array $items): array
     {
         $classified = [];
-        $needsAI    = [];
+        $needsAI = [];
 
         foreach ($items as $item) {
             $category = $this->rules->classify($item['name']);
@@ -85,18 +159,17 @@ class ReceiptClassificationPipeline
 
     private function applyAI(array $items): array
     {
-        $names     = array_column($items, 'name');
+        $names = array_column($items, 'name');
         $aiResults = $this->ai->classifyBatch($names);
 
         $classified = [];
-        $ambiguous  = [];
+        $ambiguous = [];
 
         foreach ($items as $item) {
             $result = $aiResults[$item['name']] ?? null;
 
             if ($result && !$result['ambiguous'] && $result['category'] !== null) {
                 $classified[] = array_merge($item, ['category' => $result['category']]);
-                // Teach the rule-based classifier so future receipts skip AI for this item
                 $this->rules->learn(
                     $item['name'],
                     $result['category'],
