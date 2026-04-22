@@ -5,6 +5,7 @@ use App\Models\Member;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use function Livewire\Volt\{action, layout, state};
 
@@ -24,31 +25,52 @@ $register = action(function () {
         'email.email' => 'Informe um e-mail válido.',
         'email.unique' => 'Este e-mail já está cadastrado.',
         'phone.required' => 'O telefone é obrigatório.',
-        'phone.unique' => 'Este telefone já está cadastrado.',
         'password.required' => 'A senha é obrigatória.',
         'password.min' => 'A senha deve ter no mínimo 8 caracteres.',
         'password.confirmed' => 'A confirmação de senha não confere.',
     ]);
 
-    $user = User::create([
-        'name' => $this->name,
-        'email' => $this->email,
-        'password' => Hash::make($this->password),
-    ]);
+    if (User::whereHas('currentMember', fn ($query) => $query->where('phone', $this->phone))->exists()) {
+        $this->addError('phone', 'Este telefone já está vinculado a outro usuário.');
+        return;
+    }
 
-    $group = Group::create([
-        'name' => 'Casa de '.$this->name,
-        'slug' => Str::slug('casa-de-'.$this->name.'-'.uniqid()),
-        'active' => true,
-    ]);
+    [$user, $group] = DB::transaction(function () {
+        $member = Member::where('phone', $this->phone)->first();
 
-    Member::create([
-        'group_id' => $group->id,
-        'name' => $this->name,
-        'phone' => $this->phone,
-        'split_percent' => 50,
-        'active' => true,
-    ]);
+        if ($member) {
+            $member->update([
+                'name' => $this->name,
+                'active' => true,
+            ]);
+
+            $group = $member->group;
+        } else {
+            $group = Group::create([
+                'name' => 'Casa de '.$this->name,
+                'slug' => Str::slug('casa-de-'.$this->name.'-'.uniqid()),
+                'active' => true,
+            ]);
+
+            $member = Member::create([
+                'group_id' => $group->id,
+                'name' => $this->name,
+                'phone' => $this->phone,
+                'split_percent' => 50,
+                'active' => true,
+            ]);
+        }
+
+        $user = User::create([
+            'name' => $this->name,
+            'email' => $this->email,
+            'password' => Hash::make($this->password),
+            'current_group_id' => $group->id,
+            'current_member_id' => $member->id,
+        ]);
+
+        return [$user, $group];
+    });
 
     Auth::login($user);
     session()->regenerate();

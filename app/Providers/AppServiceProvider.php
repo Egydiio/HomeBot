@@ -2,9 +2,10 @@
 
 namespace App\Providers;
 
-use App\Models\Group;
+use App\Services\CurrentHouseholdService;
 use App\Models\MonthlyClose;
 use App\Models\Transaction;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Volt\Volt;
@@ -29,15 +30,23 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         View::composer(['layouts.app', 'layouts::app'], function ($view): void {
-            $group = Group::where('active', true)->first();
+            $group = app(CurrentHouseholdService::class)->groupForUser(Auth::user());
 
             $view->with([
                 'layoutGroupName'   => $group?->name ?? 'Minha Casa',
-                'layoutPendingClose' => MonthlyClose::where('status', 'charged')->count(),
+                'layoutPendingClose' => MonthlyClose::query()
+                    ->when($group, fn($query) => $query->where('group_id', $group->id), fn($query) => $query->whereRaw('1 = 0'))
+                    ->where('status', 'charged')
+                    ->count(),
                 'layoutPendingPix'  => Transaction::where('status', 'pending')
+                    ->when($group, fn($query) => $query->where('group_id', $group->id), fn($query) => $query->whereRaw('1 = 0'))
                     ->whereMonth('created_at', now()->month)
                     ->count(),
-                'layoutRecentTx'    => Transaction::with('member')->latest()->take(3)->get(),
+                'layoutRecentTx'    => Transaction::with('member')
+                    ->when($group, fn($query) => $query->where('group_id', $group->id), fn($query) => $query->whereRaw('1 = 0'))
+                    ->latest()
+                    ->take(3)
+                    ->get(),
             ]);
         });
     }

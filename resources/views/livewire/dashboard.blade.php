@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Group;
+use App\Services\CurrentHouseholdService;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use Livewire\Component;
@@ -26,7 +26,7 @@ new class extends Component {
 
     public function mount(): void
     {
-        $this->group = Group::where('active', true)->first();
+        $this->group = app(CurrentHouseholdService::class)->groupForUser(auth()->user());
 
         $transactions = Transaction::with('member')
             ->where('group_id', $this->group?->id)
