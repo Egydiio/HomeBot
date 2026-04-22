@@ -57,4 +57,27 @@ TEXT;
         $this->assertStringContainsString('ARROZ', $prepared[0]);
         $this->assertStringContainsString('DETERGENTE', $prepared[1]);
     }
+
+    public function test_it_joins_item_description_with_following_price_line(): void
+    {
+        $service = app(OcrProcessorService::class);
+
+        $rawText = <<<TEXT
+SUPERMERCADO CASA BOA
+CNPJ 12.345.678/0001-90
+7896051114024 CR LEITE ITAMBE 200G TP
+2 X 5,49
+37086 C BOV ACEM RESF KG
+0,856KG X 29,90
+TOTAL 36,58
+TEXT;
+
+        $prepared = $service->prepareStringsForLlama($rawText);
+
+        $this->assertCount(2, $prepared);
+        $this->assertStringContainsString('CR LEITE ITAMBE', $prepared[0]);
+        $this->assertStringContainsString('10.98', $prepared[0]);
+        $this->assertStringContainsString('C BOV ACEM RESF', $prepared[1]);
+        $this->assertStringContainsString('KG', $prepared[1]);
+    }
 }
