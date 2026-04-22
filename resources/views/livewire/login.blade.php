@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
-use function Livewire\Volt\{state, action, layout};
+use function Livewire\Volt\{action, layout, state};
 
 layout('layouts.auth');
 
@@ -9,13 +9,14 @@ state(['email' => '', 'password' => '']);
 
 $login = action(function () {
     $this->validate([
-        'email'    => 'required|email',
+        'email' => 'required|email',
         'password' => 'required',
     ]);
 
     if (Auth::attempt(['email' => $this->email, 'password' => $this->password], false)) {
         session()->regenerate();
-        return redirect()->intended('/');
+
+        return redirect()->intended(route('dashboard'));
     }
 
     $this->addError('email', 'E-mail ou senha incorretos.');
@@ -24,83 +25,63 @@ $login = action(function () {
 ?>
 
 <div class="w-full max-w-sm">
+    <a href="{{ route('home') }}" class="mb-8 flex items-center justify-center gap-3">
+        <x-hb.logo-mark size="lg" />
+        <span class="text-lg font-semibold tracking-tight text-[#eef0f5]">HomeBot</span>
+    </a>
 
-    {{-- Logo --}}
-    <div class="flex items-center gap-3 justify-center mb-8">
-        <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-lg">
-            🏠
-        </div>
-        <span class="text-lg font-semibold tracking-tight">HomeBot</span>
-    </div>
+    <div class="hb-auth-card">
+        <h1 class="text-base font-semibold text-[#eef0f5]">Entrar no painel</h1>
+        <p class="hb-muted mt-1">Digite suas credenciais para continuar</p>
 
-    {{-- Card --}}
-    <div class="bg-[#141618] border border-white/[0.07] rounded-2xl px-8 py-8">
-
-        <h1 class="text-base font-semibold mb-1">Entrar no painel</h1>
-        <p class="text-[13px] text-white/40 mb-6">Digite suas credenciais para continuar</p>
-
-        <form wire:submit="login" class="flex flex-col gap-4">
-
-            {{-- Email --}}
+        <form wire:submit="login" class="mt-6 flex flex-col gap-4">
             <div class="flex flex-col gap-1.5">
-                <label for="email" class="text-[12px] font-medium text-white/50 uppercase tracking-wider">E-mail</label>
+                <label for="email" class="hb-form-label">E-mail</label>
                 <input
                     id="email"
                     type="email"
                     wire:model="email"
                     autocomplete="email"
                     placeholder="admin@homebot.app"
-                    class="bg-[#0e0f11] border border-white/[0.08] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white/90 placeholder-white/20
-                           focus:outline-none focus:border-[#1fcc8a]/50 focus:ring-1 focus:ring-[#1fcc8a]/30 transition-all
-                           @error('email') border-red-500/50 @enderror"
+                    class="hb-input @error('email') hb-input-error @enderror"
                 >
                 @error('email')
-                    <span class="text-[12px] text-red-400">{{ $message }}</span>
+                    <span class="hb-form-error">{{ $message }}</span>
                 @enderror
             </div>
 
-            {{-- Senha --}}
             <div class="flex flex-col gap-1.5">
-                <label for="password" class="text-[12px] font-medium text-white/50 uppercase tracking-wider">Senha</label>
+                <label for="password" class="hb-form-label">Senha</label>
                 <input
                     id="password"
                     type="password"
                     wire:model="password"
                     autocomplete="current-password"
                     placeholder="••••••••"
-                    class="bg-[#0e0f11] border border-white/[0.08] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white/90 placeholder-white/20
-                           focus:outline-none focus:border-[#1fcc8a]/50 focus:ring-1 focus:ring-[#1fcc8a]/30 transition-all
-                           @error('password') border-red-500/50 @enderror"
+                    class="hb-input @error('password') hb-input-error @enderror"
                 >
                 @error('password')
-                    <span class="text-[12px] text-red-400">{{ $message }}</span>
+                    <span class="hb-form-error">{{ $message }}</span>
                 @enderror
             </div>
 
-            {{-- Submit --}}
-            <button
-                type="submit"
-                class="mt-1 w-full bg-[#1fcc8a] hover:bg-[#1ab87c] text-[#0e0f11] font-semibold text-[13.5px] rounded-lg py-2.5 transition-all
-                       flex items-center justify-center gap-2"
-            >
+            <button type="submit" class="hb-button-primary mt-1 w-full">
                 <span wire:loading.remove wire:target="login">Entrar</span>
                 <span wire:loading wire:target="login" class="flex items-center gap-2">
-                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                     </svg>
                     Entrando…
                 </span>
             </button>
-
         </form>
     </div>
 
-    {{-- Link registro --}}
-    <p class="text-center text-[12.5px] text-white/30 mt-5">
+    <p class="mt-5 text-center text-[13px] text-[#414858]">
         Não tem uma conta?
-        <a href="{{ route('register') }}" class="text-[#1fcc8a] hover:text-[#1ab87c] transition-colors">Criar conta</a>
+        <a href="{{ route('register') }}" class="font-medium text-[#1fcc8a] transition hover:text-[#1ab87c]">Criar conta</a>
     </p>
 
-    <p class="text-center text-[11px] text-white/20 mt-4">HomeBot v1.0</p>
+    <p class="mt-4 text-center text-[11px] text-[#414858]/80">HomeBot v1.0</p>
 </div>

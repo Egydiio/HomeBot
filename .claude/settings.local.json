@@ -1,7 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(php -l app/Services/ReceiptClassificationPipeline.php)",
+      "Bash(php -l app/Jobs/ProcessReceiptImage.php)",
+      "Bash(php -l app/Services/Bot/BotRouter.php)",
+      "Bash(php -l app/Services/Bot/ConversationState.php)",
+      "Bash(php -l app/Services/OpenAIFallbackClassifierService.php)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(gunzip -c \"/home/egydio/.claude/projects/-home-egydio-Projetos-HomeBot/cc1a5fb9-bcf7-4071-b3b7-347da1b8d5d5/tool-results/webfetch-1776810120556-czzjxv.bin\")",
+      "Bash(tar -x -C /tmp/homebot_design)",
+      "Read(//tmp/homebot_design/homebot/**)",
+      "Bash(npm run *)",
+      "Bash(php artisan *)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/dashboard.blade.php)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/transaction-list.blade.php)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/balance-summary.blade.php)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/monthly-report.blade.php)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/group-settings.blade.php)",
+      "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/layouts/app.blade.php)",
+      "Bash(php *)"
     ]
   }
 }
