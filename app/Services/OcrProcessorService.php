@@ -420,7 +420,7 @@ class OcrProcessorService
                 $name = preg_replace('/' . preg_quote($wm[0], '/') . '/i', '', $name);
                 $name = preg_replace('/\d+[.,]?\d{2}/', '', $name);
                 $name = preg_replace('/\bkg\b/i', '', $name);
-                $name = trim(preg_replace('/[\-\*\u2022]+/', ' ', $name));
+                $name = trim(preg_replace('/[\-\*\x{2022}]+/u', ' ', $name));
 
                 $codeOut = $code ?? 'KG-UNKNOWN';
                 $quantidadeOut = rtrim($weight, ' ');
@@ -473,7 +473,7 @@ class OcrProcessorService
             $name = preg_replace('/\b\d+\s*[xX]\s*\d+[.,]?\d{2}\b/', '', $name);
             $name = preg_replace('/\d+[.,]?\d{2}/', '', $name);
             $name = preg_replace('/\bkg\b/i', '', $name);
-            $name = trim(preg_replace('/[\-\*\u2022]+/', ' ', $name));
+            $name = trim(preg_replace('/[\-\*\x{2022}]+/u', ' ', $name));
 
             $codeOut = $code ?? 'NO_CODE';
             $quantidadeOut = $qty;
@@ -505,15 +505,14 @@ class OcrProcessorService
         return trim($name);
     }
 
-    private function debugExtractLines(string $rawText): array
+    public function debugExtractLines(string $rawText): array
     {
         return $this->extractAndNormalizeLines($rawText);
     }
 
-    private function debugCleanLines(string $rawText): array
+    public function debugCleanLines(string $rawText): array
     {
         $lines = $this->extractAndNormalizeLines($rawText);
         return $this->cleanLinesForLlama($lines);
     }
 }
-
