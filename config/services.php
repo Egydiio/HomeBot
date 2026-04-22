@@ -41,6 +41,7 @@ return [
 
     'google_vision' => [
         'key_path' => env('GOOGLE_VISION_KEY_PATH', ''),
+        'feature' => env('GOOGLE_VISION_FEATURE', 'document_text_detection'),
     ],
 
     'openai' => [

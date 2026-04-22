@@ -2,58 +2,59 @@
 
 namespace App\Console\Commands;
 
-use Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
-use Google\Cloud\Vision\V1\BatchAnnotateImagesRequest;
-use Google\Cloud\Vision\V1\AnnotateImageRequest;
-use Google\Cloud\Vision\V1\Image as VisionImage;
-use Google\Cloud\Vision\V1\Feature;
-use Illuminate\Console\Command;
+use App\Services\OcrProcessorService;
 use App\Services\OcrService;
+use Google\Cloud\Vision\V1\AnnotateImageRequest;
+use Google\Cloud\Vision\V1\BatchAnnotateImagesRequest;
+use Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
+use Google\Cloud\Vision\V1\Feature;
+use Google\Cloud\Vision\V1\Image as VisionImage;
+use Illuminate\Console\Command;
 
 class TestOcr extends Command
 {
     protected $signature = 'ocr:test {path?} {--debug : Show debug extraction/cleaning output}';
     protected $description = 'Testa o OCR com uma imagem local ou URL';
 
-    public function handle()
+    public function handle(): int
     {
         $path = $this->argument('path') ?? storage_path('app/teste.jpeg');
         $credentialsPath = config('services.google_vision.key_path');
 
-        $this->info("🔍 Testando OCR...");
+        $this->info('🔍 Testando OCR...');
         $this->line("📂 Fonte: {$path}");
 
         if (!is_string($credentialsPath) || trim($credentialsPath) === '') {
-            $this->error('❌ GOOGLE_VISION_KEY_PATH não está configurado.');
+            $this->error('❌ GOOGLE_VISION_KEY_PATH nao esta configurado.');
             return self::FAILURE;
         }
 
         if (!is_file($credentialsPath) || !is_readable($credentialsPath)) {
-            $this->error("❌ Arquivo de credenciais do Google Vision indisponível: {$credentialsPath}");
+            $this->error("❌ Arquivo de credenciais do Google Vision indisponivel: {$credentialsPath}");
             return self::FAILURE;
         }
 
         /** @var OcrService $ocr */
         $ocr = app(OcrService::class);
 
-        // DEBUG: rodar só Vision primeiro
-        $this->line("\n--- 🧠 OCR (Google Vision) ---");
+        $this->line("\n--- 🧠 OCR (Google Vision: {$ocr->getGoogleVisionFeatureName()}) ---");
 
         try {
             $client = new ImageAnnotatorClient([
                 'credentials' => $credentialsPath,
             ]);
 
-            $imageContent = str_starts_with($path, 'http')
-                ? file_get_contents($path)
-                : file_get_contents($path);
+            $imageContent = file_get_contents($path);
+            if ($imageContent === false || $imageContent === '') {
+                $this->error("❌ Nao consegui ler o arquivo: {$path}");
+                return self::FAILURE;
+            }
 
             $visionImage = new VisionImage();
             $visionImage->setContent($imageContent);
 
             $feature = new Feature();
-            // TEXT_DETECTION enum value is 5 in the proto definition
-            $feature->setType(5);
+            $feature->setType($ocr->getGoogleVisionFeatureType());
 
             $annotateReq = new AnnotateImageRequest();
             $annotateReq->setImage($visionImage);
@@ -71,82 +72,84 @@ class TestOcr extends Command
             }
 
             if (empty($texts)) {
-                $this->error("❌ Nenhum texto encontrado pelo Vision");
-                return;
+                $this->error('❌ Nenhum texto encontrado pelo Vision');
+                return self::FAILURE;
             }
 
             $rawText = $texts[0]->getDescription();
-
         } catch (\Throwable $e) {
-            $this->error("❌ Erro no Vision: " . $e->getMessage());
+            $this->error('❌ Erro no Vision: ' . $e->getMessage());
             return self::FAILURE;
         }
 
-        // Agora prepara as linhas que iremos enviar para a IA local (Llama)
-        $this->line("\n--- 🧹 Preparando linhas para Llama (pré-processamento) ---");
+        $this->line("\n--- 🧹 Preparando linhas para Llama (pre-processamento) ---");
 
-        /** @var \App\Services\OcrProcessorService $processor */
-        $processor = app(\App\Services\OcrProcessorService::class);
-
+        /** @var OcrProcessorService $processor */
+        $processor = app(OcrProcessorService::class);
         $prepared = $processor->prepareStringsForLlama($rawText);
 
-        // If debug flag provided, print intermediate extraction steps
         if ($this->option('debug')) {
-            $this->line("\n--- DEBUG: linhas extraídas (candidato a item) ---");
+            $this->line("\n--- DEBUG: linhas extraidas (candidato a item) ---");
             $extracted = $processor->debugExtractLines($rawText);
             if (empty($extracted)) {
                 $this->line('(nenhuma linha candidata encontrada pelo extractor)');
             } else {
-                foreach ($extracted as $l) $this->line($l);
+                foreach ($extracted as $line) {
+                    $this->line($line);
+                }
             }
 
-            $this->line("\n--- DEBUG: linhas após limpeza inicial ---");
-            $cleanedDebug = $processor->debugCleanLines($rawText);
-            if (empty($cleanedDebug)) {
-                $this->line('(nenhuma linha após limpeza inicial)');
+            $this->line("\n--- DEBUG: linhas apos limpeza inicial ---");
+            $cleaned = $processor->debugCleanLines($rawText);
+            if (empty($cleaned)) {
+                $this->line('(nenhuma linha apos limpeza inicial)');
             } else {
-                foreach ($cleanedDebug as $l) $this->line($l);
+                foreach ($cleaned as $line) {
+                    $this->line($line);
+                }
             }
         }
 
-        $this->info("\n📦 Linhas preparadas (formato: CÓDIGO - NOME - QTD - VALOR_UNIT - VALOR_TOTAL):");
+        $this->info("\n📦 Linhas preparadas (formato: CODIGO - NOME - QTD - VALOR_UNIT - VALOR_TOTAL):");
 
         if (empty($prepared)) {
-            $this->line("(nenhuma linha válida encontrada para envio)");
+            $this->line('(nenhuma linha valida encontrada para envio)');
         } else {
-            foreach ($prepared as $ln) {
-                $parts = array_map('trim', explode(' - ', $ln));
-
-                if (count($parts) === 5) {
-                    [$code, $name, $qty, $unit, $total] = $parts;
-
-                    // Uppercase the name
-                    $name = mb_strtoupper($name);
-
-                    // Weight items keep KG in qty
-                    if (preg_match('/kg$/i', $qty)) {
-                        $out = sprintf('%s - %s - %s - %s - %s', $code, $name, $qty, $unit, $total);
-                    } else {
-                        $qtyNum = is_numeric($qty) ? intval($qty) : null;
-
-                        if ($qtyNum === null) {
-                            $out = sprintf('%s - %s - %s - %s - %s', $code, $name, $qty, $unit, $total);
-                        } elseif ($qtyNum > 1) {
-                            $out = sprintf('%s - %s - %sUN - %s - %s', $code, $name, $qtyNum, $unit, $total);
-                        } else {
-                            // qty == 1
-                            $out = sprintf('%s - %s - 1UN - %s - %s', $code, $name, $unit, $total);
-                        }
-                    }
-                } else {
-                    $out = $ln; // fallback
-                }
-
-                $this->line($out);
+            foreach ($prepared as $preparedLine) {
+                $this->line($this->formatPreparedLine($preparedLine));
             }
         }
 
         $this->line("\n✅ Teste finalizado.");
+
         return self::SUCCESS;
+    }
+
+    private function formatPreparedLine(string $preparedLine): string
+    {
+        $parts = array_map('trim', explode(' - ', $preparedLine));
+
+        if (count($parts) !== 5) {
+            return $preparedLine;
+        }
+
+        [$code, $name, $qty, $unit, $total] = $parts;
+        $name = mb_strtoupper($name);
+
+        if (preg_match('/kg$/i', $qty)) {
+            return sprintf('%s - %s - %s - %s - %s', $code, $name, $qty, $unit, $total);
+        }
+
+        $qtyNum = is_numeric($qty) ? (int) $qty : null;
+
+        if ($qtyNum === null) {
+            return sprintf('%s - %s - %s - %s - %s', $code, $name, $qty, $unit, $total);
+        }
+
+        if ($qtyNum > 1) {
+            return sprintf('%s - %s - %sUN - %s - %s', $code, $name, $qtyNum, $unit, $total);
+        }
+
+        return sprintf('%s - %s - 1UN - %s - %s', $code, $name, $unit, $total);
     }
 }
