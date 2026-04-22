@@ -54,6 +54,12 @@ return [
         'base_url' => env('MERCADOPAGO_BASE_URL', 'https://api.mercadopago.com'),
     ],
 
+    'ocr' => [
+        'min_image_bytes' => (int) env('OCR_MIN_IMAGE_BYTES', 4096),
+        'max_image_bytes' => (int) env('OCR_MAX_IMAGE_BYTES', 10485760),
+        'result_cache_ttl_seconds' => (int) env('OCR_RESULT_CACHE_TTL_SECONDS', 259200),
+    ],
+
     'llama' => [
         'endpoint' => env('LLAMA_ENDPOINT', 'http://localhost:4891'),
     ],

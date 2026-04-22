@@ -16,28 +16,25 @@ class WebhookController extends Controller
     {
         Log::info('Webhook recebido', ['type' => $request->input('type'), 'has_image' => $request->has('image')]);
 
-        // Z-API envia vários tipos de evento — só queremos mensagens
         if (!$this->isValidMessage($request)) {
             return response()->json(['status' => 'ignored']);
         }
 
-        $phone   = $this->extractPhone($request);
+        $phone = $this->extractPhone($request);
         $message = $this->extractMessage($request);
-        $media   = $this->extractMedia($request);
+        $media = $this->extractMedia($request);
 
         if (!$phone) {
             return response()->json(['status' => 'no_phone']);
         }
 
-        // Busca o membro pelo número — se não existir, ignora por enquanto
         $member = Member::where('phone', $phone)->first();
 
         if (!$member) {
-            Log::info("Mensagem de número não cadastrado: {$phone}");
+            Log::info("Mensagem de numero nao cadastrado: {$phone}");
             return response()->json(['status' => 'unknown_member']);
         }
 
-        // Delega pro BotRouter decidir o que fazer
         $this->router->handle($member, $message, $media);
 
         return response()->json(['status' => 'ok']);
@@ -45,10 +42,17 @@ class WebhookController extends Controller
 
     private function isValidMessage(Request $request): bool
     {
-        // Ignora mensagens do próprio bot, status e grupos
-        if ($request->boolean('fromMe'))    return false;
-        if ($request->boolean('isGroup'))   return false;
-        if ($request->input('type') === 'ReceivedCallback') return false;
+        if ($request->boolean('fromMe')) {
+            return false;
+        }
+
+        if ($request->boolean('isGroup')) {
+            return false;
+        }
+
+        if ($request->input('type') === 'ReceivedCallback') {
+            return false;
+        }
 
         return $request->has('phone');
     }
@@ -57,20 +61,19 @@ class WebhookController extends Controller
     {
         $phone = $request->input('phone');
 
-        if (!$phone) return null;
+        if (!$phone) {
+            return null;
+        }
 
-        // Remove @c.us que a Z-API às vezes inclui
         return preg_replace('/@.*$/', '', $phone);
     }
 
     private function extractMessage(Request $request): string
     {
-        // Texto simples
         if ($request->has('text.message')) {
             return trim($request->input('text.message'));
         }
 
-        // Caption de imagem
         if ($request->has('image.caption')) {
             return trim($request->input('image.caption'));
         }
@@ -80,23 +83,38 @@ class WebhookController extends Controller
 
     private function extractMedia(Request $request): ?array
     {
-        // Imagem enviada
         if ($request->has('image')) {
             return [
-                'type'    => 'image',
-                'url'     => $request->input('image.imageUrl'),
+                'type' => 'image',
+                'url' => $request->input('image.imageUrl'),
                 'caption' => $request->input('image.caption', ''),
+                'mime_type' => $request->input('image.mimeType')
+                    ?? $request->input('image.mimetype')
+                    ?? $request->input('image.type'),
+                'size' => $this->extractNumericValue(
+                    $request->input('image.fileSize')
+                        ?? $request->input('image.size')
+                        ?? $request->input('image.fileLength')
+                ),
             ];
         }
 
-        // Documento/PDF
         if ($request->has('document')) {
             return [
                 'type' => 'document',
-                'url'  => $request->input('document.documentUrl'),
+                'url' => $request->input('document.documentUrl'),
             ];
         }
 
         return null;
+    }
+
+    private function extractNumericValue(mixed $value): ?int
+    {
+        if ($value === null || $value === '' || !is_numeric($value)) {
+            return null;
+        }
+
+        return (int) $value;
     }
 }
