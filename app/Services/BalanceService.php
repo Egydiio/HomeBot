@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Balance;
 use App\Models\Member;
 use App\Models\Transaction;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -61,11 +62,13 @@ class BalanceService
         float  $amount,
         string $month,
     ): void {
+        $monthDate = Carbon::parse($month)->toDateString();
+
         // Verifica se já existe saldo inverso (creditor deve ao debtor)
         $inverse = Balance::where('group_id', $groupId)
             ->where('debtor_id', $creditorId)
             ->where('creditor_id', $debtorId)
-            ->where('reference_month', $month)
+            ->whereDate('reference_month', $monthDate)
             ->lockForUpdate()
             ->first();
 
@@ -88,33 +91,29 @@ class BalanceService
             // Inverteu — o devedor agora é o outro
             $inverse->delete();
             $amount = abs($remaining);
-
-            // Inverte os papéis
-            [$debtorId, $creditorId] = [$creditorId, $debtorId];
         }
 
-        // Atualiza ou cria o saldo
-        Balance::updateOrCreate(
-            [
-                'group_id'        => $groupId,
-                'debtor_id'       => $debtorId,
-                'creditor_id'     => $creditorId,
-                'reference_month' => $month,
-            ],
-            [
-                'amount' => DB::raw('amount + ' . floatval($amount)),
-            ]
-        );
+        $balance = Balance::firstOrNew([
+            'group_id'        => $groupId,
+            'debtor_id'       => $debtorId,
+            'creditor_id'     => $creditorId,
+            'reference_month' => $monthDate,
+        ]);
+
+        $balance->amount = round(((float) $balance->amount) + $amount, 2);
+        $balance->save();
     }
 
     // Retorna o saldo líquido do mês para um membro
     public function getMemberSummary(Member $member, string $month): array
     {
+        $monthDate = Carbon::parse($month)->toDateString();
+
         // Quanto esse membro deve pra outros
         $debts = Balance::with('creditor')
             ->where('group_id', $member->group_id)
             ->where('debtor_id', $member->id)
-            ->where('reference_month', $month)
+            ->whereDate('reference_month', $monthDate)
             ->where('amount', '>', 0)
             ->get();
 
@@ -122,7 +121,7 @@ class BalanceService
         $credits = Balance::with('debtor')
             ->where('group_id', $member->group_id)
             ->where('creditor_id', $member->id)
-            ->where('reference_month', $month)
+            ->whereDate('reference_month', $monthDate)
             ->where('amount', '>', 0)
             ->get();
 
