@@ -11,6 +11,7 @@ use App\Services\Bot\Handlers\BillHandler;
 use App\Services\RuleBasedClassifierService;
 use Exception;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class BotRouter
 {
@@ -175,6 +176,16 @@ class BotRouter
             return;
         }
 
+        if (($data['type'] ?? null) === 'bill') {
+            $this->handleBillConfirmation($member, $transaction, $text);
+            return;
+        }
+
+        if (($data['correction_mode'] ?? false) === true) {
+            $this->handleReceiptCorrection($member, $transaction, $message, $data);
+            return;
+        }
+
         if (in_array($text, ['sim', 's', 'yes', '✅'])) {
             // Confirma e atualiza o saldo
             $houseAmount = $transaction->items->where('category', 'house')->sum('value');
@@ -200,10 +211,16 @@ class BotRouter
         }
 
         if (in_array($text, ['corrigir', 'corrigir', 'não', 'nao', 'n', 'editar'])) {
+            $this->state->setData($member->phone, array_merge($data, [
+                'correction_mode' => true,
+            ]));
+
             $this->zApi()->sendText($member->phone,
-                "✏️ Me diga qual item está errado e a categoria correta.\n\n" .
-                "Exemplo: *Energético Monster = casa*\n" .
-                "ou: *Sorvete = pessoal*"
+                "✏️ Me diga qual item quer ajustar e a categoria correta.\n\n" .
+                "Exemplos:\n" .
+                "*Sorvete = pessoal*\n" .
+                "*Detergente = casa*\n\n" .
+                "Depois que eu ajustar, você pode mandar outro item ou responder *SIM* para confirmar tudo."
             );
             return;
         }
@@ -311,6 +328,148 @@ class BotRouter
         // Todos os itens classificados — mostra resumo
         $this->state->clear($member->phone);
         $this->classifyHandler->handle($transaction->fresh(['items']));
+    }
+
+    private function handleBillConfirmation(Member $member, \App\Models\Transaction $transaction, string $text): void
+    {
+        if (in_array($text, ['sim', 's', 'yes', '✅'])) {
+            $value = (float) $transaction->total_amount;
+
+            if ($value <= 0) {
+                $this->state->setState($member->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
+                $this->state->setData($member->phone, [
+                    'transaction_id' => $transaction->id,
+                    'type' => 'bill',
+                ]);
+
+                $this->zApi()->sendText($member->phone,
+                    "⚠️ Não consegui confirmar o valor automaticamente. Me mande o total da conta, por exemplo: *145,90*"
+                );
+                return;
+            }
+
+            $transaction->update([
+                'house_amount' => $value,
+                'status' => 'confirmed',
+            ]);
+
+            app(\App\Services\BalanceService::class)->updateBalance($transaction);
+
+            $this->zApi()->sendText($member->phone,
+                "✅ *Conta confirmada!*\n\n" .
+                "💰 R$ " . number_format($value, 2, ',', '.') . " registrado como despesa da casa.\n\n" .
+                "Digite *saldo* para ver o resumo do mês."
+            );
+
+            $this->state->clear($member->phone);
+            return;
+        }
+
+        if (in_array($text, ['não', 'nao', 'n', 'editar', 'corrigir'])) {
+            $this->state->setState($member->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
+            $this->state->setData($member->phone, [
+                'transaction_id' => $transaction->id,
+                'type' => 'bill',
+            ]);
+
+            $this->zApi()->sendText($member->phone,
+                "Sem problema. Me manda o valor correto da conta, assim: *145,90*"
+            );
+            return;
+        }
+
+        $this->zApi()->sendText($member->phone,
+            "Responda *SIM* para confirmar o valor ou *NÃO* para me mandar o valor correto."
+        );
+    }
+
+    private function handleReceiptCorrection(
+        Member $member,
+        \App\Models\Transaction $transaction,
+        string $message,
+        array $data,
+    ): void {
+        $text = strtolower(trim($message));
+
+        if (in_array($text, ['sim', 's', 'yes', '✅'])) {
+            $this->state->setData($member->phone, [
+                'transaction_id' => $transaction->id,
+            ]);
+
+            $this->handleConfirmation($member, 'sim');
+            return;
+        }
+
+        $parsed = $this->parseItemCorrection($message);
+
+        if ($parsed === null) {
+            $this->zApi()->sendText($member->phone,
+                "Não consegui entender a correção.\n\n" .
+                "Use o formato *nome do item = casa* ou *nome do item = pessoal*.\n" .
+                "Exemplo: *Sorvete = pessoal*"
+            );
+            return;
+        }
+
+        [$itemName, $category] = $parsed;
+
+        $item = $transaction->items->first(
+            fn($transactionItem) => Str::contains(
+                Str::lower($transactionItem->name),
+                Str::lower($itemName)
+            )
+        );
+
+        if (!$item) {
+            $availableItems = $transaction->items
+                ->pluck('name')
+                ->take(5)
+                ->implode(', ');
+
+            $this->zApi()->sendText($member->phone,
+                "Não encontrei esse item na nota.\n\n" .
+                "Tente usar parte do nome exatamente como apareceu. Exemplos nesta nota: {$availableItems}"
+            );
+            return;
+        }
+
+        $item->update([
+            'category' => $category,
+            'confirmed' => true,
+        ]);
+
+        $this->rules->learn($item->name, $category, 'user', 100);
+
+        $label = $category === 'house' ? 'casa' : 'pessoal';
+
+        $this->state->setData($member->phone, array_merge($data, [
+            'transaction_id' => $transaction->id,
+            'correction_mode' => true,
+        ]));
+
+        $this->zApi()->sendText($member->phone,
+            "✅ Ajustei *{$item->name}* para *{$label}*.\n\n" .
+            "Se quiser, mande outra correção no mesmo formato.\n" .
+            "Quando terminar, responda *SIM* para confirmar tudo."
+        );
+    }
+
+    private function parseItemCorrection(string $message): ?array
+    {
+        if (!preg_match('/^\s*(.+?)\s*(?:=|->|:)\s*(casa|house|pessoal|personal)\s*$/iu', trim($message), $matches)) {
+            return null;
+        }
+
+        $name = trim($matches[1]);
+        $category = in_array(mb_strtolower($matches[2]), ['casa', 'house'], true)
+            ? 'house'
+            : 'personal';
+
+        if ($name === '') {
+            return null;
+        }
+
+        return [$name, $category];
     }
 
     private function parseMoneyValue(string $message): ?float
