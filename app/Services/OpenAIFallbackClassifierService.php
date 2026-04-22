@@ -50,7 +50,7 @@ Nenhum texto adicional. Sem markdown. Apenas o JSON.
 SYSTEM;
 
         $payload = [
-            'model'       => 'gpt-4o-mini',
+            'model'       => config('services.openai.model', 'gpt-4o-mini'),
             'messages'    => [
                 ['role' => 'system', 'content' => $system],
                 ['role' => 'user',   'content' => $numbered],
@@ -60,6 +60,12 @@ SYSTEM;
         ];
 
         $apiKey = config('services.openai.key');
+        $baseUrl = rtrim(config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
+
+        if (!is_string($apiKey) || trim($apiKey) === '') {
+            Log::warning('OpenAIFallback: OPENAI_API_KEY não configurada, pulando classificação remota');
+            return $this->unknownResults($uniqueNames);
+        }
 
         try {
             $resp = Http::withHeaders([
@@ -68,7 +74,7 @@ SYSTEM;
             ])
                 ->timeout(60)
                 ->connectTimeout(10)
-                ->post('https://api.openai.com/v1/chat/completions', $payload);
+                ->post($baseUrl . '/chat/completions', $payload);
 
             if (!$resp->successful()) {
                 Log::error('OpenAIFallback: endpoint retornou erro', ['status' => $resp->status()]);

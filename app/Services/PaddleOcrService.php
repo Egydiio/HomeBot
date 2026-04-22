@@ -34,7 +34,7 @@ class PaddleOcrService
         }
 
         $optionalHeaders = [];
-        if ($token = config('services.zapi.client_token')) {
+        if ($token = config('zapi.client_token')) {
             $optionalHeaders['Client-Token'] = $token;
         }
 

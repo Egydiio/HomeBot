@@ -8,10 +8,12 @@ use Illuminate\Support\Facades\Log;
 class PixService
 {
     private string $accessToken;
+    private string $baseUrl;
 
     public function __construct()
     {
         $this->accessToken = config('services.mercadopago.access_token');
+        $this->baseUrl = rtrim(config('services.mercadopago.base_url', 'https://api.mercadopago.com'), '/');
     }
 
     // Gera link de pagamento Pix via Mercado Pago
@@ -20,12 +22,17 @@ class PixService
         string $payerName,
         string $description,
     ): ?array {
+        if (blank($this->accessToken)) {
+            Log::warning('PixService: MERCADOPAGO_ACCESS_TOKEN não configurado, usando apenas fallback manual');
+            return null;
+        }
+
         try {
             $response = Http::withHeaders([
                 'Authorization' => "Bearer {$this->accessToken}",
                 'Content-Type'  => 'application/json',
                 'X-Idempotency-Key' => uniqid('homebot_', true),
-            ])->post('https://api.mercadopago.com/v1/payment_links', [
+            ])->post($this->baseUrl . '/v1/payment_links', [
                 'name'            => $description,
                 'payment_methods' => [
                     'excluded_payment_types' => [
