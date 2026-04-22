@@ -1,14 +1,15 @@
 <?php
 
 use App\Models\Balance;
-use App\Models\Group;
 use App\Models\Member;
+use App\Services\CurrentHouseholdService;
 use Livewire\Component;
 
 new class extends Component
 {
     public $group;
     public $members;
+    public $currentMember;
     public string $splitRule = '50/50';
 
     public bool $showInviteModal = false;
@@ -21,7 +22,9 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->group   = Group::where('active', true)->first();
+        $service = app(CurrentHouseholdService::class);
+        $this->group = $service->groupForUser(auth()->user());
+        $this->currentMember = $service->memberForUser(auth()->user());
         $this->members = $this->group?->members()->get() ?? collect();
     }
 
@@ -47,10 +50,11 @@ new class extends Component
     {
         $this->validate([
             'inviteName'  => 'required|string|max:255',
-            'invitePhone' => 'required|string|max:20',
+            'invitePhone' => 'required|string|max:20|unique:members,phone',
         ], [
             'inviteName.required'  => 'O nome é obrigatório.',
             'invitePhone.required' => 'O telefone é obrigatório.',
+            'invitePhone.unique'   => 'Este telefone já está cadastrado.',
         ]);
 
         Member::create([
@@ -148,8 +152,8 @@ new class extends Component
         {{-- Pix key --}}
         <div class="hb-card p-5">
             <div class="hb-label mb-3.5">Chave Pix</div>
-            @php $firstMember = $members->first(); @endphp
-            @if($editingPixMemberId === $firstMember?->id)
+            @php $pixMember = $currentMember ?: $members->first(); @endphp
+            @if($editingPixMemberId === $pixMember?->id)
             <div class="flex flex-col gap-2.5 sm:flex-row">
                 <input wire:model="editingPixValue"
                        type="text"
@@ -168,9 +172,9 @@ new class extends Component
             @else
             <div class="flex flex-col gap-2.5 sm:flex-row">
                 <div class="flex-1 rounded-lg border border-[#1d2028] bg-[#1a1c21] px-3.5 py-2.5 font-mono text-[13px] text-[#eef0f5]">
-                    {{ $firstMember?->pix_key ?? 'Não configurada' }}
+                    {{ $pixMember?->pix_key ?? 'Não configurada' }}
                 </div>
-                <button wire:click="startEditPix({{ $firstMember?->id ?? 0 }})"
+                <button wire:click="startEditPix({{ $pixMember?->id ?? 0 }})"
                         class="hb-button-secondary px-4 text-xs">
                     Alterar
                 </button>
@@ -216,7 +220,7 @@ new class extends Component
                     <div>
                         <div class="text-[13px] font-medium text-[#eef0f5]">WhatsApp conectado</div>
                         <div class="text-[11px] text-[#414858] mt-0.5">
-                            {{ $firstMember?->phone ?? '+55 11 00000-0000' }} · Ativo
+                            {{ $pixMember?->phone ?? '+55 11 00000-0000' }} · Ativo
                         </div>
                     </div>
                 </div>

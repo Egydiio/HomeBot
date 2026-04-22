@@ -1,13 +1,14 @@
 <?php
 
-use App\Models\Group;
 use App\Models\Member;
 use App\Models\Transaction;
+use App\Services\CurrentHouseholdService;
 use Livewire\Component;
 
 new class extends Component
 {
     public $group;
+    public $currentMember;
     public $transactions;
     public string $typeFilter = 'all';
     public string $memberFilter = 'all';
@@ -20,7 +21,9 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->group = Group::where('active', true)->first();
+        $service = app(CurrentHouseholdService::class);
+        $this->group = $service->groupForUser(auth()->user());
+        $this->currentMember = $service->memberForUser(auth()->user());
         $this->members = $this->group?->members()->where('active', true)->get() ?? collect();
         $this->loadTransactions();
     }
@@ -62,7 +65,7 @@ new class extends Component
         $memberCount = max(1, $this->members->count());
         $this->myShare = $this->totalHouse / $memberCount;
 
-        $authMember = $this->members->first();
+        $authMember = $this->currentMember ?: $this->members->first();
         if ($authMember) {
             $this->totalPaid = (float) $all->where('member_id', $authMember->id)->sum('house_amount');
         }

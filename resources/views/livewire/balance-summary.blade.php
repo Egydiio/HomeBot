@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Balance;
-use App\Models\Group;
 use App\Models\Transaction;
+use App\Services\CurrentHouseholdService;
 use Livewire\Component;
 
 new class extends Component {
@@ -25,7 +25,7 @@ new class extends Component {
 
     private function load(): void
     {
-        $group = Group::where('active', true)->first();
+        $group = app(CurrentHouseholdService::class)->groupForUser(auth()->user());
         $month = now()->format('Y-m-01');
 
         $this->totalCredit = 0;

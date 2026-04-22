@@ -1,8 +1,8 @@
 <?php
 
-use App\Models\Group;
 use App\Models\MonthlyClose;
 use App\Models\Transaction;
+use App\Services\CurrentHouseholdService;
 use Livewire\Component;
 
 new class extends Component
@@ -13,7 +13,7 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->group = Group::where('active', true)->first();
+        $this->group = app(CurrentHouseholdService::class)->groupForUser(auth()->user());
 
         $this->closes = MonthlyClose::with(['debtor', 'creditor'])
             ->where('group_id', $this->group?->id)
