@@ -8,6 +8,7 @@ use App\Services\Bot\Handlers\HelpHandler;
 use App\Services\Bot\Handlers\ReceiptHandler;
 use App\Services\Bot\Handlers\BalanceHandler;
 use App\Services\Bot\Handlers\BillHandler;
+use App\Services\PaymentConfirmationService;
 use App\Services\RuleBasedClassifierService;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -47,6 +48,11 @@ class BotRouter
             return;
         }
 
+        if (in_array($text, ['paguei', 'ja paguei', 'já paguei', 'pix pago', 'ja transferi', 'já transferi'])) {
+            $this->handlePaymentReported($member);
+            return;
+        }
+
         // Roteamento por estado atual
         match ($currentState) {
             ConversationState::STATE_IDLE
@@ -66,6 +72,9 @@ class BotRouter
 
             ConversationState::STATE_WAITING_ITEM_CLASSIFICATION
             => $this->handleItemClassification($member, $message),
+
+            ConversationState::STATE_WAITING_PAYMENT_SELECTION
+            => $this->handlePaymentSelection($member, $message),
 
             default => $this->helpHandler->handle($member),
         };
@@ -330,6 +339,131 @@ class BotRouter
         $this->classifyHandler->handle($transaction->fresh(['items']));
     }
 
+    private function handlePaymentReported(Member $member): void
+    {
+        $openCloses = $this->paymentConfirmation()->findOpenClosesForMember($member);
+
+        if ($openCloses->isEmpty()) {
+            $this->state->clear($member->phone);
+            $this->zApi()->sendText($member->phone,
+                "✅ Não encontrei nenhuma cobrança pendente no seu nome agora.\n\n" .
+                "Se você acabou de pagar e ainda quer registrar manualmente, me avise no painel depois."
+            );
+            return;
+        }
+
+        if ($openCloses->count() === 1) {
+            $this->confirmMonthlyClosePayment($member, $openCloses->first());
+            return;
+        }
+
+        $this->state->setState($member->phone, ConversationState::STATE_WAITING_PAYMENT_SELECTION);
+        $this->state->setData($member->phone, [
+            'monthly_close_ids' => $openCloses->pluck('id')->all(),
+        ]);
+
+        $message = "💸 Encontrei mais de uma cobrança em aberto. Qual delas você pagou?\n\n";
+
+        foreach ($openCloses->values() as $index => $close) {
+            $position = $index + 1;
+            $month = $close->reference_month->translatedFormat('F \d\e Y');
+
+            $message .= "{$position}. *{$close->creditor->name}* — R$ " .
+                number_format((float) $close->amount, 2, ',', '.') .
+                " ({$month})\n";
+        }
+
+        $message .= "\nResponda com o número da cobrança ou *cancelar*.";
+
+        $this->zApi()->sendText($member->phone, $message);
+    }
+
+    private function handlePaymentSelection(Member $member, string $message): void
+    {
+        $text = strtolower(trim($message));
+
+        if (in_array($text, ['cancelar', 'cancela', 'menu'])) {
+            $this->state->clear($member->phone);
+            $this->zApi()->sendText($member->phone,
+                "Tudo certo. Quando quiser registrar um pagamento, é só mandar *paguei*."
+            );
+            return;
+        }
+
+        $data = $this->state->getData($member->phone);
+
+        if (!$data || empty($data['monthly_close_ids']) || !is_array($data['monthly_close_ids'])) {
+            $this->state->clear($member->phone);
+            $this->helpHandler->handle($member);
+            return;
+        }
+
+        if (!preg_match('/^\d+$/', $text)) {
+            $this->zApi()->sendText($member->phone,
+                "Responda com o número da cobrança que foi paga ou *cancelar*."
+            );
+            return;
+        }
+
+        $position = ((int) $text) - 1;
+        $closeId = $data['monthly_close_ids'][$position] ?? null;
+
+        if (!$closeId) {
+            $this->zApi()->sendText($member->phone,
+                "Esse número não está na lista. Responda com uma das opções enviadas ou *cancelar*."
+            );
+            return;
+        }
+
+        $close = $this->paymentConfirmation()
+            ->findOpenClosesForMember($member)
+            ->firstWhere('id', $closeId);
+
+        if (!$close) {
+            $this->state->clear($member->phone);
+            $this->zApi()->sendText($member->phone,
+                "Não encontrei mais essa cobrança em aberto. Se precisar, mande *paguei* novamente."
+            );
+            return;
+        }
+
+        $this->confirmMonthlyClosePayment($member, $close);
+    }
+
+    private function confirmMonthlyClosePayment(Member $member, \App\Models\MonthlyClose $close): void
+    {
+        try {
+            $confirmedClose = $this->paymentConfirmation()->confirmPayment($close, $member);
+        } catch (\Throwable $e) {
+            Log::error('BotRouter: erro ao confirmar pagamento', [
+                'member_id' => $member->id,
+                'monthly_close_id' => $close->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->state->clear($member->phone);
+            $this->zApi()->sendText($member->phone,
+                "⚠️ Não consegui registrar esse pagamento agora. Tente novamente em instantes."
+            );
+            return;
+        }
+
+        $this->state->clear($member->phone);
+
+        $month = $confirmedClose->reference_month->translatedFormat('F \d\e Y');
+        $amount = number_format((float) $confirmedClose->amount, 2, ',', '.');
+
+        $this->zApi()->sendText($member->phone,
+            "✅ Pagamento registrado!\n\n" .
+            "Cobrança de *R$ {$amount}* para *{$confirmedClose->creditor->name}* " .
+            "referente a *{$month}* marcada como paga."
+        );
+
+        $this->zApi()->sendText($confirmedClose->creditor->phone,
+            "💰 {$member->name} marcou como pago o fechamento de {$month} no valor de R$ {$amount}."
+        );
+    }
+
     private function handleBillConfirmation(Member $member, \App\Models\Transaction $transaction, string $text): void
     {
         if (in_array($text, ['sim', 's', 'yes', '✅'])) {
@@ -488,5 +622,10 @@ class BotRouter
     private function zApi(): \App\Services\ZApiService
     {
         return app(\App\Services\ZApiService::class);
+    }
+
+    private function paymentConfirmation(): PaymentConfirmationService
+    {
+        return app(PaymentConfirmationService::class);
     }
 }

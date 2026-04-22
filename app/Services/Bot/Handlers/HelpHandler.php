@@ -18,6 +18,7 @@ class HelpHandler
             "📸 *Mande uma foto da nota* — eu leio os itens e divido a conta\n" .
             "📄 *Mande uma foto de uma conta* (luz, água, internet) — eu divido entre a casa\n" .
             "💰 *saldo* — veja quanto você deve ou te devem\n" .
+            "✅ *paguei* — marca uma cobrança mensal como paga\n" .
             "📊 *resumo* — veja tudo que foi registrado esse mês\n\n" .
             "Qualquer dúvida é só falar! 😊"
         );
