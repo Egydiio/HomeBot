@@ -30,6 +30,9 @@ use Illuminate\Support\Facades\Log;
 
 class OcrService
 {
+    public const VISION_FEATURE_TEXT_DETECTION = 5;
+    public const VISION_FEATURE_DOCUMENT_TEXT_DETECTION = 11;
+
     private ?ImageAnnotatorClient $client = null;
 
     // Método principal — recebe URL da imagem e retorna itens extraídos
@@ -111,8 +114,7 @@ class OcrService
             $visionImage->setContent($imageContent);
 
             $feature = new Feature();
-            // TEXT_DETECTION enum value is 5 in the proto definition
-            $feature->setType(5);
+            $feature->setType($this->getGoogleVisionFeatureType());
 
             $annotateReq = new AnnotateImageRequest();
             $annotateReq->setImage($visionImage);
@@ -242,6 +244,23 @@ class OcrService
             'total' => null,
             'items' => [],
         ];
+    }
+
+    public function getGoogleVisionFeatureType(): int
+    {
+        $configured = strtolower(trim((string) config('services.google_vision.feature', 'document_text_detection')));
+
+        return match ($configured) {
+            'text_detection', 'text' => self::VISION_FEATURE_TEXT_DETECTION,
+            default => self::VISION_FEATURE_DOCUMENT_TEXT_DETECTION,
+        };
+    }
+
+    public function getGoogleVisionFeatureName(): string
+    {
+        return $this->getGoogleVisionFeatureType() === self::VISION_FEATURE_TEXT_DETECTION
+            ? 'TEXT_DETECTION'
+            : 'DOCUMENT_TEXT_DETECTION';
     }
 
     private function getClient(): ?ImageAnnotatorClient
