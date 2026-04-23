@@ -2,7 +2,7 @@
 
 namespace App\Services\Bot\Handlers;
 
-use App\Jobs\ProcessReceiptImage;
+use App\Jobs\ProcessNfceFromImage;
 use App\Models\Member;
 use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
@@ -54,7 +54,7 @@ class ReceiptHandler
             'transaction_id' => $transaction->id,
         ]);
 
-        ProcessReceiptImage::dispatch(
+        ProcessNfceFromImage::dispatch(
             $transaction->id,
             $media['url'],
             $member->phone,
