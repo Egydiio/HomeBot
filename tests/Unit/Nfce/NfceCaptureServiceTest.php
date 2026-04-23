@@ -4,6 +4,8 @@ namespace Tests\Unit\Nfce;
 
 use App\Services\Nfce\NfceCaptureService;
 use App\Services\PaddleOcrService;
+use App\Services\ReceiptImageGuardService;
+use Illuminate\Support\Facades\Http;
 use Mockery;
 use Tests\TestCase;
 
@@ -11,13 +13,15 @@ class NfceCaptureServiceTest extends TestCase
 {
     private NfceCaptureService $service;
     private PaddleOcrService $ocr;
+    private ReceiptImageGuardService $imageGuard;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->ocr     = Mockery::mock(PaddleOcrService::class);
-        $this->service = new NfceCaptureService($this->ocr);
+        $this->imageGuard = app(ReceiptImageGuardService::class);
+        $this->service = new NfceCaptureService($this->ocr, $this->imageGuard);
     }
 
     public function test_extracts_key_from_valid_qr_url(): void
@@ -67,6 +71,10 @@ class NfceCaptureServiceTest extends TestCase
     {
         $key = '31240101000000000000655700000000101234567890';
 
+        Http::fake([
+            '*' => Http::response('not an image', 200, ['Content-Type' => 'text/html']),
+        ]);
+
         $this->ocr
             ->shouldReceive('extractTextFromUrl')
             ->once()
@@ -88,6 +96,10 @@ class NfceCaptureServiceTest extends TestCase
 
     public function test_capture_returns_invalid_when_both_strategies_fail(): void
     {
+        Http::fake([
+            '*' => Http::response('not an image', 200, ['Content-Type' => 'text/html']),
+        ]);
+
         $this->ocr
             ->shouldReceive('extractTextFromUrl')
             ->andReturn('no key here, just random text without digits');

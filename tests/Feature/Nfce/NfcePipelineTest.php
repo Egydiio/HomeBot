@@ -150,6 +150,44 @@ class NfcePipelineTest extends TestCase
         $this->assertEquals(8.90, $normalized[0]->totalValue);
     }
 
+    public function test_extractor_ignores_layout_tables_without_headers_in_fallback_search(): void
+    {
+        $html = <<<HTML
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <body>
+            <table><tr><td>layout only</td></tr></table>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Descrição</th>
+                        <th>Quantidade</th>
+                        <th>Un. Com.</th>
+                        <th>Valor Unitário</th>
+                        <th>Valor(R$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cafe Torrado 500g</td>
+                        <td>1</td>
+                        <td>UN</td>
+                        <td>12,90</td>
+                        <td>12,90</td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>
+        HTML;
+
+        $extractor = new NfceItemExtractor();
+        $items = $extractor->extract(new NfcePortalResult($html, '31', 0.1, 'qr'));
+
+        $this->assertCount(1, $items);
+        $this->assertSame('Cafe Torrado 500g', $items[0]->name);
+    }
+
     private function buildMgHtml(array $rows): string
     {
         $rowsHtml = '';

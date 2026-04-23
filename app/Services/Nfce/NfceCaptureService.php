@@ -4,7 +4,7 @@ namespace App\Services\Nfce;
 
 use App\Services\Nfce\DTO\NfceCaptureResult;
 use App\Services\PaddleOcrService;
-use Illuminate\Support\Facades\Http;
+use App\Services\ReceiptImageGuardService;
 use Illuminate\Support\Facades\Log;
 use Khanamiryan\QrCodeReader\QrReader;
 
@@ -12,6 +12,7 @@ class NfceCaptureService
 {
     public function __construct(
         protected PaddleOcrService $ocrService,
+        protected ReceiptImageGuardService $imageGuardService,
     ) {}
 
     public function capture(string $imageUrl): NfceCaptureResult
@@ -42,13 +43,12 @@ class NfceCaptureService
     private function tryQrCode(string $imageUrl): NfceCaptureResult
     {
         try {
-            $response = Http::timeout(15)->get($imageUrl);
-
-            if (!$response->successful()) {
+            $image = $this->imageGuardService->fetchValidatedImage($imageUrl);
+            if ($image === null) {
                 return new NfceCaptureResult(null, null, 'none');
             }
 
-            $imageContent = $response->body();
+            $imageContent = $image['content'];
 
             $qrData = $this->decodeQr($imageContent);
 

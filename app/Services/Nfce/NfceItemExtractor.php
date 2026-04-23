@@ -111,7 +111,12 @@ class NfceItemExtractor
                 return;
             }
 
-            $headerText = strtolower($node->filter('th')->text('', false));
+            $headers = $node->filter('th');
+            if ($headers->count() === 0) {
+                return;
+            }
+
+            $headerText = strtolower($headers->text('', false));
 
             if (str_contains($headerText, 'descri')) {
                 $table = $node;

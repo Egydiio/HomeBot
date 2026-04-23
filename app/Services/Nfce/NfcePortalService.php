@@ -24,6 +24,8 @@ class NfcePortalService
 
     /** @var NfceProviderInterface[] */
     private array $providers;
+    /** @var string[] */
+    private array $trustedHosts;
 
     public function __construct(
         private readonly NfceCaptureService $captureService,
@@ -32,6 +34,10 @@ class NfcePortalService
             new MgNfceProvider(),
             new SpNfceProvider(),
         ];
+        $this->trustedHosts = array_values(array_filter(array_map(function (NfceProviderInterface $provider): ?string {
+            $host = parse_url($provider->buildQueryUrl(str_repeat('0', 44)), PHP_URL_HOST);
+            return is_string($host) ? strtolower($host) : null;
+        }, $this->providers)));
     }
 
     public function fetch(NfceCaptureResult $capture): NfcePortalResult
@@ -39,6 +45,10 @@ class NfcePortalService
         $start = microtime(true);
 
         if ($capture->hasQrUrl()) {
+            if (!$this->isTrustedPortalUrl($capture->qrCodeUrl)) {
+                throw new \RuntimeException('QR Code contém URL fora dos domínios SEFAZ confiáveis.');
+            }
+
             return $this->fetchUrl($capture->qrCodeUrl, $capture->accessKey, 'qr', $start);
         }
 
@@ -129,6 +139,32 @@ class NfcePortalService
         }
 
         return null;
+    }
+
+    private function isTrustedPortalUrl(string $url): bool
+    {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
+            return false;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            return false;
+        }
+
+        $host = strtolower($host);
+
+        foreach ($this->trustedHosts as $trustedHost) {
+            if ($host === $trustedHost || str_ends_with($host, ".{$trustedHost}")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function logFailed(string $uf, string $source, string $reason): void
