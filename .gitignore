@@ -24,7 +24,6 @@ Homestead.yaml
 Thumbs.db
 
 # Contexto local para agentes de IA (não versionar)
-docs/
 .ai-context/
 *.local.md
 .local-docs/
