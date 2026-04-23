@@ -22,3 +22,11 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Contexto local para agentes de IA (não versionar)
+.ai-context/
+*.local.md
+.local-docs/
+.claude-context/
+.cursor-context/
+.codex-context/

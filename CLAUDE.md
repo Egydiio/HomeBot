@@ -1,5 +1,7 @@
 # HomeBot — CLAUDE.md
 
+> **Contexto estendido para agentes de IA:** existe uma pasta local `.ai-context/` (não versionada) com documentação detalhada de arquitetura, padrões de código, fluxos do bot, regras financeiras e instruções específicas para agentes. Consulte `.ai-context/AGENT_INSTRUCTIONS.md` como ponto de entrada.
+
 ## Visão geral
 
 Bot de controle financeiro doméstico via WhatsApp (Z-API). Permite que membros de uma casa registrem notas fiscais e contas, classifiquem despesas como "casa" ou "pessoal", e acompanhem o saldo mensal compartilhado.
