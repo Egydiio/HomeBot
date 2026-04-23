@@ -23,7 +23,15 @@
       "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/monthly-report.blade.php)",
       "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/livewire/group-settings.blade.php)",
       "Bash(php -l /home/egydio/Projetos/HomeBot/resources/views/layouts/app.blade.php)",
-      "Bash(php *)"
+      "Bash(php *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(composer require *)",
+      "Bash(git stash *)",
+      "Bash(git -C /home/egydio/Projetos/HomeBot branch -a)",
+      "Bash(git -C /home/egydio/Projetos/HomeBot checkout develop)",
+      "Bash(git -C /home/egydio/Projetos/HomeBot pull origin develop)",
+      "Bash(git *)"
     ]
   }
 }
