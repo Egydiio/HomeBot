@@ -76,7 +76,6 @@ class NfceItemExtractor
             $text = trim($node->text('', false));
 
             if (stripos($text, 'Produtos e Servi') !== false && $node->nodeName() !== 'table') {
-                // Walk up the DOM to find a container, then find the next table sibling or descendant
                 $parent = $node;
 
                 for ($i = 0; $i < 5; $i++) {
@@ -105,7 +104,20 @@ class NfceItemExtractor
             return $table;
         }
 
-        // Strategy 2: find the table whose headers contain "Descri" (Descrição)
+        // Strategy 2: MG portal format — tbody with id="myTable" (no <thead>)
+        // Must run before the generic header-text search because other tables on the same
+        // page (e.g. "Informações Complementares") also have <th>Descrição</th>.
+        $tbody = $crawler->filter('tbody#myTable');
+        if ($tbody->count()) {
+            // Wrap in parent <table> if needed
+            try {
+                return $tbody->ancestors()->filter('table')->first()->count()
+                    ? $tbody->ancestors()->filter('table')->first()
+                    : null;
+            } catch (\Throwable) {}
+        }
+
+        // Strategy 3: table whose <th> headers contain "Descri" (Descrição)
         $crawler->filter('table')->each(function (Crawler $node) use (&$table) {
             if ($table !== null) {
                 return;
@@ -116,10 +128,40 @@ class NfceItemExtractor
                 return;
             }
 
-            $headerText = strtolower($headers->text('', false));
-
-            if (str_contains($headerText, 'descri')) {
+            if (str_contains(strtolower($headers->text('', false)), 'descri')) {
                 $table = $node;
+            }
+        });
+
+        if ($table !== null) {
+            return $table;
+        }
+
+        // Strategy 4: table near a "Filtar" / "Filter" input (MG portal item list)
+        $crawler->filter('input[placeholder]')->each(function (Crawler $input) use (&$table, $crawler) {
+            if ($table !== null) {
+                return;
+            }
+
+            $placeholder = strtolower($input->attr('placeholder') ?? '');
+            if (str_contains($placeholder, 'filtr') || str_contains($placeholder, 'filter')) {
+                try {
+                    $sibling = $input->ancestors()->first()->nextAll()->filter('table')->first();
+                    if ($sibling->count()) {
+                        $table = $sibling;
+                        return;
+                    }
+                    // Maybe the table is a sibling of a parent
+                    $parent = $input->ancestors()->first();
+                    for ($i = 0; $i < 3; $i++) {
+                        $next = $parent->nextAll()->filter('table')->first();
+                        if ($next->count()) {
+                            $table = $next;
+                            return;
+                        }
+                        $parent = $parent->ancestors()->first();
+                    }
+                } catch (\Throwable) {}
             }
         });
 
@@ -181,6 +223,35 @@ class NfceItemExtractor
             $cells->each(function (Crawler $cell) use (&$cellTexts) {
                 $cellTexts[] = trim($cell->text('', false));
             });
+
+            // MG portal format: "Qtde total de ítens: N" in col 1, "Valor total R$: R$ N" in col 3
+            // Name cell contains "<h7>NAME</h7>(Código: XXXXX)" — text() strips tags, leaves suffix
+            if (isset($cellTexts[1]) && stripos($cellTexts[1], 'Qtde') !== false) {
+                $description = trim(preg_replace('/\s*\(Código:.*?\)/i', '', $cellTexts[0]));
+
+                if (empty($description) || is_numeric($description)) {
+                    return;
+                }
+
+                $quantityRaw = preg_replace('/[^\d,.]/', '', $cellTexts[1]);
+                $totalRaw    = preg_replace('/[^\d,.]/', '', $cellTexts[3] ?? '0');
+
+                $quantity = $this->parseNumber($quantityRaw ?: '1');
+                $total    = $this->parseNumber($totalRaw ?: '0');
+
+                if ($quantity <= 0 || $total <= 0) {
+                    return;
+                }
+
+                $items[] = new NfceItemDTO(
+                    name: $description,
+                    quantity: $quantity,
+                    unitValue: $quantity > 0 ? round($total / $quantity, 4) : 0.0,
+                    totalValue: $total,
+                );
+
+                return;
+            }
 
             $description = $cellTexts[$columnMap['description']] ?? '';
             $quantityRaw = $cellTexts[$columnMap['quantity']] ?? '1';
