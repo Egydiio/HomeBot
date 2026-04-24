@@ -7,18 +7,20 @@ use App\Models\Member;
 use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
 use App\Services\ReceiptImageGuardService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 
 class BillHandler
 {
     public function __construct(
-        protected ZApiService $zApi,
+        protected WhatsAppClientInterface $whatsapp,
         protected ConversationState $state,
         protected ReceiptImageGuardService $imageGuard,
     ) {}
 
     public function handle(Member $member, array $media): void
     {
+        $imageSource = $media['storage_path'] ?? $media['url'] ?? null;
+
         $transaction = Transaction::create([
             'group_id' => $member->group_id,
             'member_id' => $member->id,
@@ -26,7 +28,7 @@ class BillHandler
             'description' => 'Conta da casa',
             'total_amount' => 0,
             'house_amount' => 0,
-            'receipt_image' => $media['url'] ?? null,
+            'receipt_image' => $imageSource,
             'status' => 'pending',
             'reference_month' => now()->startOfMonth(),
         ]);
@@ -38,14 +40,14 @@ class BillHandler
                 'type' => 'bill',
             ]);
 
-            $this->zApi->sendText($member->phone,
+            $this->whatsapp->sendText($member->phone,
                 '⚠️ A imagem nao parece valida para OCR. Me manda o valor da conta, por exemplo: *145,90*'
             );
 
             return;
         }
 
-        $this->zApi->sendText($member->phone,
+        $this->whatsapp->sendText($member->phone,
             '📄 Recebi a conta! Estou lendo o valor, aguarde... ⏳'
         );
 
@@ -57,7 +59,7 @@ class BillHandler
 
         ProcessReceiptImage::dispatch(
             $transaction->id,
-            $media['url'],
+            $imageSource,
             $member->phone,
         )->onQueue('ocr');
     }

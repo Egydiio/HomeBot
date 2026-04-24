@@ -15,6 +15,8 @@ class WebhookControllerTest extends TestCase
 
     public function test_it_routes_a_valid_text_message_to_the_bot(): void
     {
+        config()->set('whatsapp.webhook_token', 'test-token');
+
         $member = $this->makeMember('5511999999999');
 
         $router = Mockery::mock(BotRouter::class);
@@ -28,12 +30,14 @@ class WebhookControllerTest extends TestCase
 
         $this->app->instance(BotRouter::class, $router);
 
-        $response = $this->postJson('/api/webhook', [
-            'phone' => '5511999999999@c.us',
-            'text' => ['message' => 'saldo'],
+        $response = $this->withHeaders([
+            'X-HomeBot-Webhook-Token' => 'test-token',
+        ])->postJson('/api/webhook/whatsapp', [
+            'phone' => '5511999999999',
+            'body' => 'saldo',
             'fromMe' => false,
             'isGroup' => false,
-            'type' => 'chat',
+            'messageType' => 'text',
         ]);
 
         $response->assertOk()->assertJson(['status' => 'ok']);
@@ -41,16 +45,20 @@ class WebhookControllerTest extends TestCase
 
     public function test_it_ignores_group_or_from_me_messages(): void
     {
+        config()->set('whatsapp.webhook_token', 'test-token');
+
         $router = Mockery::mock(BotRouter::class);
         $router->shouldNotReceive('handle');
         $this->app->instance(BotRouter::class, $router);
 
-        $response = $this->postJson('/api/webhook', [
+        $response = $this->withHeaders([
+            'X-HomeBot-Webhook-Token' => 'test-token',
+        ])->postJson('/api/webhook/whatsapp', [
             'phone' => '5511999999999',
-            'text' => ['message' => 'oi'],
+            'body' => 'oi',
             'fromMe' => true,
             'isGroup' => false,
-            'type' => 'chat',
+            'messageType' => 'text',
         ]);
 
         $response->assertOk()->assertJson(['status' => 'ignored']);
@@ -58,16 +66,20 @@ class WebhookControllerTest extends TestCase
 
     public function test_it_returns_unknown_member_when_phone_is_not_registered(): void
     {
+        config()->set('whatsapp.webhook_token', 'test-token');
+
         $router = Mockery::mock(BotRouter::class);
         $router->shouldNotReceive('handle');
         $this->app->instance(BotRouter::class, $router);
 
-        $response = $this->postJson('/api/webhook', [
+        $response = $this->withHeaders([
+            'X-HomeBot-Webhook-Token' => 'test-token',
+        ])->postJson('/api/webhook/whatsapp', [
             'phone' => '5511888888888',
-            'text' => ['message' => 'oi'],
+            'body' => 'oi',
             'fromMe' => false,
             'isGroup' => false,
-            'type' => 'chat',
+            'messageType' => 'text',
         ]);
 
         $response->assertOk()->assertJson(['status' => 'unknown_member']);

@@ -23,9 +23,10 @@ class NfceCaptureService
 
         if ($result->isValid()) {
             Log::info('nfce.capture.success', [
-                'source'   => $result->source,
+                'source' => $result->source,
                 'duration' => round(microtime(true) - $start, 3),
             ]);
+
             return $result;
         }
 
@@ -33,7 +34,7 @@ class NfceCaptureService
 
         $event = $result->isValid() ? 'nfce.capture.success' : 'nfce.capture.failed';
         Log::info($event, [
-            'source'   => $result->source,
+            'source' => $result->source,
             'duration' => round(microtime(true) - $start, 3),
         ]);
 
@@ -58,6 +59,7 @@ class NfceCaptureService
 
             if (filter_var($qrData, FILTER_VALIDATE_URL)) {
                 $accessKey = $this->extractKeyFromQrUrl($qrData);
+
                 return new NfceCaptureResult($qrData, $accessKey, 'qr');
             }
 
@@ -74,7 +76,13 @@ class NfceCaptureService
     private function tryOcrKey(string $imageUrl): NfceCaptureResult
     {
         try {
-            $text = $this->ocrService->extractTextFromUrl($imageUrl);
+            $image = $this->imageGuardService->fetchValidatedImage($imageUrl);
+
+            if ($image === null) {
+                return new NfceCaptureResult(null, null, 'none');
+            }
+
+            $text = $this->ocrService->extractTextFromContent($image['content']);
 
             if (empty($text)) {
                 return new NfceCaptureResult(null, null, 'none');
@@ -82,8 +90,9 @@ class NfceCaptureService
 
             // Sometimes OCR can read QR data as a URL
             if (preg_match('/(https?:\/\/\S+(?:nfce|nfe|fazenda)\S*)/i', $text, $matches)) {
-                $url       = $matches[1];
+                $url = $matches[1];
                 $accessKey = $this->extractKeyFromQrUrl($url);
+
                 return new NfceCaptureResult($url, $accessKey, 'key');
             }
 
@@ -101,7 +110,7 @@ class NfceCaptureService
     private function decodeQr(string $imageContent): ?string
     {
         $reader = new QrReader($imageContent, QrReader::SOURCE_TYPE_BLOB);
-        $text   = $reader->text();
+        $text = $reader->text();
 
         return ($text !== false && $text !== null && $text !== '') ? $text : null;
     }
@@ -110,7 +119,7 @@ class NfceCaptureService
     {
         $parsed = parse_url($url);
 
-        if (!isset($parsed['query'])) {
+        if (! isset($parsed['query'])) {
             return null;
         }
 
@@ -119,7 +128,7 @@ class NfceCaptureService
         // NFC-e QR code: parameter 'p' contains chave|dhEmi|vNF|vICMS|digVal|cIdToken|cHashQRCode
         $p = $params['p'] ?? null;
 
-        if (!$p) {
+        if (! $p) {
             return null;
         }
 

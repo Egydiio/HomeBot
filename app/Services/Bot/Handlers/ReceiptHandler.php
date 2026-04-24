@@ -7,18 +7,20 @@ use App\Models\Member;
 use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
 use App\Services\ReceiptImageGuardService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 
 class ReceiptHandler
 {
     public function __construct(
-        protected ZApiService $zApi,
+        protected WhatsAppClientInterface $whatsapp,
         protected ConversationState $state,
         protected ReceiptImageGuardService $imageGuard,
     ) {}
 
     public function handle(Member $member, array $media): void
     {
+        $imageSource = $media['storage_path'] ?? $media['url'] ?? null;
+
         $transaction = Transaction::create([
             'group_id' => $member->group_id,
             'member_id' => $member->id,
@@ -26,7 +28,7 @@ class ReceiptHandler
             'description' => 'Nota fiscal',
             'total_amount' => 0,
             'house_amount' => 0,
-            'receipt_image' => $media['url'] ?? null,
+            'receipt_image' => $imageSource,
             'status' => 'pending',
             'reference_month' => now()->startOfMonth(),
         ]);
@@ -38,14 +40,14 @@ class ReceiptHandler
                 'type' => 'receipt',
             ]);
 
-            $this->zApi->sendText($member->phone,
+            $this->whatsapp->sendText($member->phone,
                 '⚠️ A imagem nao parece valida para OCR. Me manda so o valor total da compra, assim: *45,90*'
             );
 
             return;
         }
 
-        $this->zApi->sendText($member->phone,
+        $this->whatsapp->sendText($member->phone,
             '📸 Recebi a foto! Estou lendo a nota, aguarde um instante... ⏳'
         );
 
@@ -56,7 +58,7 @@ class ReceiptHandler
 
         ProcessNfceFromImage::dispatch(
             $transaction->id,
-            $media['url'],
+            $imageSource,
             $member->phone,
         );
     }

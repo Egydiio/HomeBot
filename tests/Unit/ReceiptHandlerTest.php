@@ -8,7 +8,7 @@ use App\Models\Member;
 use App\Services\Bot\ConversationState;
 use App\Services\Bot\Handlers\ReceiptHandler;
 use App\Services\ReceiptImageGuardService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -24,8 +24,8 @@ class ReceiptHandlerTest extends TestCase
 
         $member = $this->makeMember();
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'nao parece valida para OCR')))
             ->andReturnTrue();
@@ -43,7 +43,7 @@ class ReceiptHandlerTest extends TestCase
             ->once()
             ->andReturn('image_too_small');
 
-        $handler = new ReceiptHandler($zApi, $state, $imageGuard);
+        $handler = new ReceiptHandler($whatsapp, $state, $imageGuard);
 
         $handler->handle($member, [
             'type' => 'image',

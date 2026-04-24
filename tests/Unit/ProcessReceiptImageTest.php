@@ -9,7 +9,7 @@ use App\Models\Transaction;
 use App\Services\Bot\ConversationState;
 use App\Services\Bot\Handlers\ClassifyHandler;
 use App\Services\ReceiptClassificationPipeline;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -32,8 +32,8 @@ class ProcessReceiptImageTest extends TestCase
                 'total' => null,
             ]);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Qual foi o valor total')))
             ->andReturnTrue();
@@ -50,7 +50,7 @@ class ProcessReceiptImageTest extends TestCase
         $classifier->shouldNotReceive('handle');
 
         $job = new ProcessReceiptImage($transaction->id, 'https://example.com/note.jpg', $member->phone);
-        $job->handle($pipeline, $zApi, $state, $classifier);
+        $job->handle($pipeline, $whatsapp, $state, $classifier);
 
         $transaction->refresh();
 

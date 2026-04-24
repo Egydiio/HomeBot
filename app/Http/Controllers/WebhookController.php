@@ -4,19 +4,26 @@ namespace App\Http\Controllers;
 
 use App\Models\Member;
 use App\Services\Bot\BotRouter;
+use App\Services\WhatsApp\IncomingWhatsAppMediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class WebhookController extends Controller
 {
-    public function __construct(protected BotRouter $router) {}
+    public function __construct(
+        protected BotRouter $router,
+        protected IncomingWhatsAppMediaStorage $mediaStorage,
+    ) {}
 
     public function handle(Request $request): JsonResponse
     {
-        Log::info('Webhook recebido', ['type' => $request->input('type'), 'has_image' => $request->has('image')]);
+        Log::info('Webhook recebido', [
+            'message_type' => $request->input('messageType'),
+            'has_media' => $request->has('media'),
+        ]);
 
-        if (!$this->isValidMessage($request)) {
+        if (! $this->isValidMessage($request)) {
             return response()->json(['status' => 'ignored']);
         }
 
@@ -24,14 +31,15 @@ class WebhookController extends Controller
         $message = $this->extractMessage($request);
         $media = $this->extractMedia($request);
 
-        if (!$phone) {
+        if (! $phone) {
             return response()->json(['status' => 'no_phone']);
         }
 
         $member = Member::where('phone', $phone)->first();
 
-        if (!$member) {
+        if (! $member) {
             Log::info("Mensagem de numero nao cadastrado: {$phone}");
+
             return response()->json(['status' => 'unknown_member']);
         }
 
@@ -54,14 +62,14 @@ class WebhookController extends Controller
             return false;
         }
 
-        return $request->has('phone');
+        return $request->filled('phone');
     }
 
     private function extractPhone(Request $request): ?string
     {
         $phone = $request->input('phone');
 
-        if (!$phone) {
+        if (! $phone) {
             return null;
         }
 
@@ -70,48 +78,34 @@ class WebhookController extends Controller
 
     private function extractMessage(Request $request): string
     {
-        if ($request->has('text.message')) {
-            return trim($request->input('text.message'));
-        }
-
-        if ($request->has('image.caption')) {
-            return trim($request->input('image.caption'));
-        }
-
-        return '';
+        return trim((string) ($request->input('body') ?? ''));
     }
 
     private function extractMedia(Request $request): ?array
     {
-        if ($request->has('image')) {
-            return [
-                'type' => 'image',
-                'url' => $request->input('image.imageUrl'),
-                'caption' => $request->input('image.caption', ''),
-                'mime_type' => $request->input('image.mimeType')
-                    ?? $request->input('image.mimetype')
-                    ?? $request->input('image.type'),
-                'size' => $this->extractNumericValue(
-                    $request->input('image.fileSize')
-                        ?? $request->input('image.size')
-                        ?? $request->input('image.fileLength')
-                ),
-            ];
+        $messageType = strtolower((string) $request->input('messageType', 'text'));
+        $media = $request->input('media');
+
+        if (! is_array($media)) {
+            return null;
         }
 
-        if ($request->has('document')) {
-            return [
-                'type' => 'document',
-                'url' => $request->input('document.documentUrl'),
-            ];
-        }
+        $storedMedia = $this->mediaStorage->store($media);
 
-        return null;
+        return [
+            'type' => str_starts_with($messageType, 'image') ? 'image' : $messageType,
+            'url' => $media['url'] ?? null,
+            'storage_path' => $storedMedia['storage_path'] ?? null,
+            'caption' => trim((string) ($request->input('body') ?? '')),
+            'mime_type' => $storedMedia['mime_type'] ?? ($media['mimeType'] ?? $media['mimetype'] ?? null),
+            'filename' => $storedMedia['filename'] ?? ($media['filename'] ?? null),
+            'size' => $storedMedia['size'] ?? $this->extractNumericValue($media['size'] ?? null),
+        ];
     }
 
     private function extractNumericValue(mixed $value): ?int
     {
-        if ($value === null || $value === '' || !is_numeric($value)) {
+        if ($value === null || $value === '' || ! is_numeric($value)) {
             return null;
         }
 
