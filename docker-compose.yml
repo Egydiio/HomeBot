@@ -30,6 +30,24 @@ services:
     depends_on:
       - app
 
+  whatsapp-service:
+    build:
+      context: ./whatsapp-service
+    container_name: homebot_whatsapp_service
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./whatsapp-service/.wwebjs_auth:/app/.wwebjs_auth
+      - ./whatsapp-service/.wwebjs_cache:/app/.wwebjs_cache
+    env_file:
+      - ./whatsapp-service/.env
+    networks:
+      - homebot
+    depends_on:
+      - app
+      - nginx
+
   postgres:
     image: postgres:16-alpine
     container_name: homebot_postgres
@@ -84,6 +102,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - whatsapp-service
 
   scheduler:
     build:
@@ -100,6 +119,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - whatsapp-service
 
 networks:
   homebot:

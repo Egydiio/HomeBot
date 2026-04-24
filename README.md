@@ -8,8 +8,8 @@ HomeBot é um SaaS brasileiro de gestão financeira doméstica via WhatsApp. O b
 - Livewire Volt + Tailwind CSS v4
 - PostgreSQL 16
 - Redis 7
-- Z-API para WhatsApp
-- Google Vision para OCR
+- Adapter local de WhatsApp via `whatsapp-web.js`
+- PaddleOCR para OCR local
 - OpenAI GPT-4o-mini para classificação quando necessário
 - Mercado Pago para link Pix
 - Docker Compose para ambiente local
@@ -17,14 +17,14 @@ HomeBot é um SaaS brasileiro de gestão financeira doméstica via WhatsApp. O b
 ## Subida local
 
 ```bash
-docker compose up -d app nginx postgres redis queue scheduler
+docker compose up -d app nginx postgres redis paddleocr whatsapp-service queue scheduler
 docker compose exec app composer install
 docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate
 ```
 
 Painel web: [http://localhost:8000](http://localhost:8000)  
-Webhook local: `POST /api/webhook`
+Webhook local: `POST /api/webhook/whatsapp`
 
 ## Comandos do bot
 
@@ -47,3 +47,14 @@ Para validar só o fluxo do bot:
 ```bash
 docker compose exec app php artisan test tests/Feature/BotRouterTest.php
 ```
+
+## WhatsApp local
+
+O MVP agora usa um serviço Node.js separado em `whatsapp-service/` para conectar no WhatsApp Web e encaminhar mensagens normalizadas para o Laravel.
+
+1. Copie `whatsapp-service/.env.example` para `whatsapp-service/.env`
+2. Suba os containers com `docker compose up -d`
+3. Veja o QR Code com `docker compose logs -f whatsapp-service`
+4. Escaneie com o WhatsApp que vai operar o bot
+
+Documentação completa: [docs/whatsapp-local-webjs.md](docs/whatsapp-local-webjs.md)
