@@ -55,6 +55,37 @@ class PaddleOcrService
     }
 
     /**
+     * Decode QR code from raw image binary content.
+     * Returns the decoded string (e.g. full NFC-e URL) or null if no QR found.
+     */
+    public function decodeQrFromContent(string $imageContent): ?string
+    {
+        if (empty($imageContent)) {
+            return null;
+        }
+
+        try {
+            $response = Http::attach('file', $imageContent, 'image.jpg', ['Content-Type' => 'image/jpeg'])
+                ->timeout(15)
+                ->post($this->endpoint . '/qr');
+
+            if (! $response->successful()) {
+                Log::warning('OCR service: QR decode failed', ['status' => $response->status()]);
+                return null;
+            }
+
+            $found = $response->json('found', false);
+            $data  = $response->json('data');
+
+            return ($found && is_string($data) && $data !== '') ? $data : null;
+
+        } catch (\Throwable $e) {
+            Log::warning('OCR service: QR decode error', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
      * Run OCR on raw image binary content.
      */
     public function extractTextFromContent(string $imageContent): string
