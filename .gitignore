@@ -19,6 +19,12 @@
 /storage/*.key
 /storage/pail
 /vendor
+/whatsapp-service/node_modules
+/whatsapp-service/.env
+/whatsapp-service/.wwebjs_auth
+/whatsapp-service/.wwebjs_cache
+/whatsapp-service/session
+/whatsapp-service/tmp
 Homestead.json
 Homestead.yaml
 Thumbs.db

@@ -65,4 +65,8 @@ return [
         'endpoint' => env('LLAMA_ENDPOINT', 'http://localhost:4891'),
     ],
 
+    'whatsapp' => [
+        'webhook_token' => env('WHATSAPP_WEBHOOK_TOKEN', ''),
+    ],
+
 ];

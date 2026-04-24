@@ -16,21 +16,22 @@ $__ocr_suppress_mask = E_DEPRECATED
     | (defined('E_USER_DEPRECATED') ? E_USER_DEPRECATED : 0)
     | (defined('E_USER_ERROR') ? E_USER_ERROR : 0);
 error_reporting($__ocr_old_error_level & ~($__ocr_suppress_mask));
-register_shutdown_function(function() use ($__ocr_old_error_level) {
+register_shutdown_function(function () use ($__ocr_old_error_level) {
     error_reporting($__ocr_old_error_level);
 });
 
-use \Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
-use Google\Cloud\Vision\V1\BatchAnnotateImagesRequest;
 use Google\Cloud\Vision\V1\AnnotateImageRequest;
-use Google\Cloud\Vision\V1\Image as VisionImage;
+use Google\Cloud\Vision\V1\BatchAnnotateImagesRequest;
+use Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
 use Google\Cloud\Vision\V1\Feature;
+use Google\Cloud\Vision\V1\Image as VisionImage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class OcrService
 {
     public const VISION_FEATURE_TEXT_DETECTION = 5;
+
     public const VISION_FEATURE_DOCUMENT_TEXT_DETECTION = 11;
 
     private ?ImageAnnotatorClient $client = null;
@@ -40,8 +41,9 @@ class OcrService
     {
         try {
             // Validar que é uma URL HTTPS para prevenir SSRF e path traversal
-            if (!filter_var($imageUrl, FILTER_VALIDATE_URL) || parse_url($imageUrl, PHP_URL_SCHEME) !== 'https') {
+            if (! filter_var($imageUrl, FILTER_VALIDATE_URL) || parse_url($imageUrl, PHP_URL_SCHEME) !== 'https') {
                 Log::error('OCR: URL inválida ou não-HTTPS rejeitada');
+
                 return $this->emptyResult();
             }
 
@@ -50,6 +52,7 @@ class OcrService
             $resolvedIp = gethostbyname($host);
             if ($resolvedIp === $host || filter_var($resolvedIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
                 Log::error('OCR: host resolve para IP privado ou inválido, rejeitado');
+
                 return $this->emptyResult();
             }
 
@@ -57,7 +60,7 @@ class OcrService
 
             // Preparar headers opcionais (ex: uso com Z-API) sem forçar sua existência
             $optionalHeaders = [];
-            if ($token = config('zapi.client_token')) {
+            if ($token = config('whatsapp.drivers.zapi.client_token')) {
                 $optionalHeaders['Client-Token'] = $token;
             }
 
@@ -77,6 +80,7 @@ class OcrService
 
             if (empty($imageContent)) {
                 Log::error('OCR: não foi possível obter o conteúdo da imagem');
+
                 return $this->emptyResult();
             }
 
@@ -84,6 +88,7 @@ class OcrService
             $trimmedStart = substr(ltrim($imageContent), 0, 15);
             if (stripos($trimmedStart, '<!DOCTYPE') === 0 || stripos($trimmedStart, '<html') === 0) {
                 Log::error('OCR: conteúdo da resposta parece HTML — abortando');
+
                 return $this->emptyResult();
             }
 
@@ -91,6 +96,7 @@ class OcrService
 
         } catch (\Exception $e) {
             Log::error('OCR erro', ['message' => $e->getMessage()]);
+
             return $this->emptyResult();
         }
     }
@@ -99,7 +105,7 @@ class OcrService
     {
         $client = $this->getClient();
 
-        if (!$client) {
+        if (! $client) {
             return $this->emptyResult();
         }
 
@@ -110,17 +116,17 @@ class OcrService
         try {
             error_reporting($oldLevel & ~$suppressMask);
 
-            $visionImage = new VisionImage();
+            $visionImage = new VisionImage;
             $visionImage->setContent($imageContent);
 
-            $feature = new Feature();
+            $feature = new Feature;
             $feature->setType($this->getGoogleVisionFeatureType());
 
-            $annotateReq = new AnnotateImageRequest();
+            $annotateReq = new AnnotateImageRequest;
             $annotateReq->setImage($visionImage);
             $annotateReq->setFeatures([$feature]);
 
-            $batchReq = new BatchAnnotateImagesRequest();
+            $batchReq = new BatchAnnotateImagesRequest;
             $batchReq->setRequests([$annotateReq]);
 
             $response = $client->batchAnnotateImages($batchReq);
@@ -130,12 +136,13 @@ class OcrService
 
         $responses = $response->getResponses();
         $texts = [];
-        if (!empty($responses) && isset($responses[0])) {
+        if (! empty($responses) && isset($responses[0])) {
             $texts = $responses[0]->getTextAnnotations();
         }
 
         if (empty($texts)) {
             Log::warning('OCR: nenhum texto encontrado na imagem');
+
             return $this->emptyResult();
         }
 
@@ -151,8 +158,9 @@ class OcrService
         $realPath = realpath($filePath);
         $storagePath = realpath(storage_path('app'));
 
-        if ($realPath === false || $storagePath === false || !str_starts_with($realPath, $storagePath)) {
+        if ($realPath === false || $storagePath === false || ! str_starts_with($realPath, $storagePath)) {
             Log::error('OCR: caminho de arquivo fora do storage rejeitado');
+
             return $this->emptyResult();
         }
 
@@ -160,12 +168,14 @@ class OcrService
 
         if ($imageContent === false || empty($imageContent)) {
             Log::error('OCR: não foi possível ler arquivo local');
+
             return $this->emptyResult();
         }
 
         $trimmedStart = substr(ltrim($imageContent), 0, 15);
         if (stripos($trimmedStart, '<!DOCTYPE') === 0 || stripos($trimmedStart, '<html') === 0) {
             Log::error('OCR: conteúdo do arquivo parece HTML — abortando');
+
             return $this->emptyResult();
         }
 
@@ -177,7 +187,7 @@ class OcrService
     {
         try {
             // Delegate to the new OcrProcessorService which handles chunking and calling the local Llama-3
-            $processor = app(\App\Services\OcrProcessorService::class);
+            $processor = app(OcrProcessorService::class);
             $result = $processor->processRawText($rawText);
 
             // Convert processor output to legacy structure { total, items[] }
@@ -199,14 +209,15 @@ class OcrService
             }
 
             $total = null;
-            if (!empty($items)) {
-                $total = array_sum(array_map(fn($i) => floatval($i['value']), $items));
+            if (! empty($items)) {
+                $total = array_sum(array_map(fn ($i) => floatval($i['value']), $items));
             }
 
             return ['total' => $total, 'items' => $items];
 
         } catch (\Exception $e) {
             Log::error('parseWithAI erro', ['message' => $e->getMessage()]);
+
             return $this->emptyResult();
         }
     }
@@ -271,15 +282,17 @@ class OcrService
 
         $credentialsPath = config('services.google_vision.key_path');
 
-        if (!is_string($credentialsPath) || trim($credentialsPath) === '') {
+        if (! is_string($credentialsPath) || trim($credentialsPath) === '') {
             Log::warning('OCR: GOOGLE_VISION_KEY_PATH não configurado');
+
             return null;
         }
 
-        if (!is_file($credentialsPath) || !is_readable($credentialsPath)) {
+        if (! is_file($credentialsPath) || ! is_readable($credentialsPath)) {
             Log::warning('OCR: arquivo de credenciais do Google Vision não encontrado ou sem leitura', [
                 'path' => $credentialsPath,
             ]);
+
             return null;
         }
 
@@ -297,6 +310,7 @@ class OcrService
             Log::error('OCR: falha ao inicializar cliente do Google Vision', [
                 'message' => $e->getMessage(),
             ]);
+
             return null;
         } finally {
             error_reporting($oldLevel);

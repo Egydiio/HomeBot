@@ -8,7 +8,7 @@ use App\Models\Member;
 use App\Services\Bot\ConversationState;
 use App\Services\Bot\Handlers\BillHandler;
 use App\Services\ReceiptImageGuardService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -24,8 +24,8 @@ class BillHandlerTest extends TestCase
 
         $member = $this->makeMember();
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Me manda o valor da conta')))
             ->andReturnTrue();
@@ -43,7 +43,7 @@ class BillHandlerTest extends TestCase
             ->once()
             ->andReturn('invalid_mime_type');
 
-        $handler = new BillHandler($zApi, $state, $imageGuard);
+        $handler = new BillHandler($whatsapp, $state, $imageGuard);
 
         $handler->handle($member, [
             'type' => 'image',

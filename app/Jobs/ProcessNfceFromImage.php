@@ -10,7 +10,7 @@ use App\Services\Nfce\NfceCategoryClassifier;
 use App\Services\Nfce\NfceItemExtractor;
 use App\Services\Nfce\NfceNormalizer;
 use App\Services\Nfce\NfcePortalService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -20,39 +20,42 @@ class ProcessNfceFromImage implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 120;
 
     public function __construct(
-        public readonly int    $transactionId,
+        public readonly int $transactionId,
         public readonly string $imageUrl,
         public readonly string $phone,
     ) {}
 
     public function handle(
-        NfceCaptureService    $capture,
-        NfcePortalService     $portal,
-        NfceItemExtractor     $extractor,
-        NfceNormalizer        $normalizer,
+        NfceCaptureService $capture,
+        NfcePortalService $portal,
+        NfceItemExtractor $extractor,
+        NfceNormalizer $normalizer,
         NfceCategoryClassifier $classifier,
-        ZApiService           $zApi,
-        ConversationState     $state,
-        ClassifyHandler       $classifyHandler,
+        WhatsAppClientInterface $whatsapp,
+        ConversationState $state,
+        ClassifyHandler $classifyHandler,
     ): void {
         Log::info("ProcessNfceFromImage: transação {$this->transactionId}");
 
         $transaction = Transaction::find($this->transactionId);
 
-        if (!$transaction) {
+        if (! $transaction) {
             Log::error("ProcessNfceFromImage: transação {$this->transactionId} não encontrada");
+
             return;
         }
 
         // --- 1. Capture Layer ---
         $captureResult = $capture->capture($this->imageUrl);
 
-        if (!$captureResult->isValid()) {
-            $this->requestManualValue($zApi, $state, 'QR Code e chave de acesso não encontrados na imagem.');
+        if (! $captureResult->isValid()) {
+            $this->requestManualValue($whatsapp, $state, 'QR Code e chave de acesso não encontrados na imagem.');
+
             return;
         }
 
@@ -60,11 +63,12 @@ class ProcessNfceFromImage implements ShouldQueue
         try {
             $portalResult = $portal->fetch($captureResult);
         } catch (\Throwable $e) {
-            Log::error("ProcessNfceFromImage: falha no portal SEFAZ", [
+            Log::error('ProcessNfceFromImage: falha no portal SEFAZ', [
                 'transaction_id' => $this->transactionId,
-                'error'          => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
-            $this->requestManualValue($zApi, $state, 'Portal SEFAZ indisponível.');
+            $this->requestManualValue($whatsapp, $state, 'Portal SEFAZ indisponível.');
+
             return;
         }
 
@@ -72,16 +76,18 @@ class ProcessNfceFromImage implements ShouldQueue
         try {
             $rawItems = $extractor->extract($portalResult);
         } catch (\Throwable $e) {
-            Log::error("ProcessNfceFromImage: falha no parsing HTML", [
+            Log::error('ProcessNfceFromImage: falha no parsing HTML', [
                 'transaction_id' => $this->transactionId,
-                'error'          => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
-            $this->requestManualValue($zApi, $state, 'Não foi possível extrair os itens da nota.');
+            $this->requestManualValue($whatsapp, $state, 'Não foi possível extrair os itens da nota.');
+
             return;
         }
 
         if (empty($rawItems)) {
-            $this->requestManualValue($zApi, $state, 'Nenhum item encontrado na nota fiscal.');
+            $this->requestManualValue($whatsapp, $state, 'Nenhum item encontrado na nota fiscal.');
+
             return;
         }
 
@@ -90,19 +96,19 @@ class ProcessNfceFromImage implements ShouldQueue
         $classifiedItems = $classifier->classifyAll($normalizedItems);
 
         // --- 5. Application Layer: persist + trigger bot ---
-        $total = array_sum(array_map(fn($item) => $item->totalValue, $classifiedItems));
+        $total = array_sum(array_map(fn ($item) => $item->totalValue, $classifiedItems));
 
         DB::transaction(function () use ($transaction, $classifiedItems, $total) {
             $transaction->update([
                 'total_amount' => $total,
-                'status'       => 'processed',
+                'status' => 'processed',
             ]);
 
             foreach ($classifiedItems as $item) {
                 $transaction->items()->create([
-                    'name'      => $item->name,
-                    'value'     => $item->totalValue,
-                    'category'  => $this->mapCategory($item->category),
+                    'name' => $item->name,
+                    'value' => $item->totalValue,
+                    'category' => $this->mapCategory($item->category),
                     'confirmed' => false,
                 ]);
             }
@@ -115,15 +121,15 @@ class ProcessNfceFromImage implements ShouldQueue
     {
         Log::error('ProcessNfceFromImage: job falhou definitivamente', [
             'transaction_id' => $this->transactionId,
-            'error'          => $exception->getMessage(),
+            'error' => $exception->getMessage(),
         ]);
 
         try {
-            $zApi  = app(ZApiService::class);
+            $whatsapp = app(WhatsAppClientInterface::class);
             $state = app(ConversationState::class);
 
-            $zApi->sendText($this->phone,
-                "⚠️ Não consegui processar a nota fiscal automaticamente. Qual foi o valor total? (ex: 45,90)"
+            $whatsapp->sendText($this->phone,
+                '⚠️ Não consegui processar a nota fiscal automaticamente. Qual foi o valor total? (ex: 45,90)'
             );
             $state->setState($this->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
             $state->setData($this->phone, ['transaction_id' => $this->transactionId]);
@@ -132,15 +138,15 @@ class ProcessNfceFromImage implements ShouldQueue
         }
     }
 
-    private function requestManualValue(ZApiService $zApi, ConversationState $state, string $reason): void
+    private function requestManualValue(WhatsAppClientInterface $whatsapp, ConversationState $state, string $reason): void
     {
-        Log::warning("ProcessNfceFromImage: solicitando valor manual", [
+        Log::warning('ProcessNfceFromImage: solicitando valor manual', [
             'transaction_id' => $this->transactionId,
-            'reason'         => $reason,
+            'reason' => $reason,
         ]);
 
-        $zApi->sendText($this->phone,
-            "⚠️ Não consegui ler a nota automaticamente. Qual foi o valor total? (ex: 45,90)"
+        $whatsapp->sendText($this->phone,
+            '⚠️ Não consegui ler a nota automaticamente. Qual foi o valor total? (ex: 45,90)'
         );
 
         $state->setState($this->phone, ConversationState::STATE_WAITING_MANUAL_VALUE);
@@ -153,7 +159,7 @@ class ProcessNfceFromImage implements ShouldQueue
         // Everything except known personal-use items defaults to 'house'
         return match ($nfceCategory) {
             'higiene' => 'personal',
-            default   => 'house',
+            default => 'house',
         };
     }
 }

@@ -15,7 +15,7 @@ use App\Services\Bot\Handlers\ClassifyHandler;
 use App\Services\Bot\Handlers\HelpHandler;
 use App\Services\Bot\Handlers\ReceiptHandler;
 use App\Services\RuleBasedClassifierService;
-use App\Services\ZApiService;
+use App\Services\WhatsApp\WhatsAppClientInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -36,12 +36,12 @@ class BotRouterTest extends TestCase
         ]);
         $state->shouldReceive('clear')->once()->with($member->phone);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Conta confirmada')))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $balance = Mockery::mock(BalanceService::class);
         $balance->shouldReceive('updateBalance')
@@ -76,12 +76,12 @@ class BotRouterTest extends TestCase
             'type' => 'bill',
         ]);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'valor correto')))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $balance = Mockery::mock(BalanceService::class);
         $balance->shouldNotReceive('updateBalance');
@@ -123,12 +123,12 @@ class BotRouterTest extends TestCase
         $rules = Mockery::mock(RuleBasedClassifierService::class);
         $rules->shouldReceive('learn')->once()->with('Sorvete', 'personal', 'user', 100);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Ajustei *Sorvete* para *pessoal*')))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $router = $this->makeRouter($state, $rules);
 
@@ -148,16 +148,16 @@ class BotRouterTest extends TestCase
         $state->shouldReceive('getState')->once()->with($member->phone)->andReturn(ConversationState::STATE_IDLE);
         $state->shouldReceive('clear')->once()->with($member->phone);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Pagamento registrado')))
             ->andReturnTrue();
-        $zApi->shouldReceive('sendText')
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($creditor->phone, Mockery::on(fn (string $message) => str_contains($message, 'marcou como pago')))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $router = $this->makeRouter($state, Mockery::mock(RuleBasedClassifierService::class));
 
@@ -183,8 +183,8 @@ class BotRouterTest extends TestCase
             fn (array $data) => ($data['monthly_close_ids'] ?? null) === $expectedIds
         ));
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(
                 fn (string $message) => str_contains($message, 'Qual delas você pagou?')
@@ -192,7 +192,7 @@ class BotRouterTest extends TestCase
                     && str_contains($message, '2.')
             ))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $router = $this->makeRouter($state, Mockery::mock(RuleBasedClassifierService::class));
 
@@ -217,16 +217,16 @@ class BotRouterTest extends TestCase
         ]);
         $state->shouldReceive('clear')->once()->with($member->phone);
 
-        $zApi = Mockery::mock(ZApiService::class);
-        $zApi->shouldReceive('sendText')
+        $whatsapp = Mockery::mock(WhatsAppClientInterface::class);
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($member->phone, Mockery::on(fn (string $message) => str_contains($message, 'Pagamento registrado')))
             ->andReturnTrue();
-        $zApi->shouldReceive('sendText')
+        $whatsapp->shouldReceive('sendText')
             ->once()
             ->with($creditor->phone, Mockery::on(fn (string $message) => str_contains($message, 'marcou como pago')))
             ->andReturnTrue();
-        $this->app->instance(ZApiService::class, $zApi);
+        $this->app->instance(WhatsAppClientInterface::class, $whatsapp);
 
         $router = $this->makeRouter($state, Mockery::mock(RuleBasedClassifierService::class));
 
