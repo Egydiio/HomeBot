@@ -1,13 +1,13 @@
-<section class="border-t border-[#1d2028] bg-gradient-to-br from-[rgba(31,204,138,0.08)] to-transparent py-20 text-center sm:py-24">
-    <div class="hb-landing-container max-w-2xl">
-        <div class="text-5xl" aria-hidden="true">🏠</div>
-        <h2 class="hb-section-title-center mt-5">Chega de perrengue na hora de dividir a conta</h2>
-        <p class="hb-section-desc-center mt-4">Comece grátis hoje. Sem cartão de crédito.</p>
-        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <x-hb.button href="{{ route('register') }}" variant="primary" size="lg">Começar agora →</x-hb.button>
-            <x-hb.button href="{{ route('login') }}" variant="secondary-muted" size="lg">Já tenho conta</x-hb.button>
+<section class="border-t border-[#1a1f2e] bg-[#0c0f14] py-20 text-center sm:py-24" style="position:relative;overflow:hidden">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(31,204,138,.07),transparent 65%);pointer-events:none" aria-hidden="true"></div>
+    <div class="hb-landing-container max-w-2xl" style="position:relative">
+        <h2 style="font-size:clamp(30px,4vw,52px);font-weight:800;letter-spacing:-.05em;color:#edf0f8;text-wrap:balance;margin-bottom:14px">Chega de discussão<br>sobre dinheiro em casa.</h2>
+        <p style="font-size:17px;color:#5d6880;margin-bottom:36px;font-family:'IBM Plex Sans',sans-serif">Comece grátis hoje. Sem cartão de crédito.</p>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+            <x-hb.button href="{{ route('register') }}" variant="primary" size="lg">Começar no WhatsApp →</x-hb.button>
+            <x-hb.button href="{{ route('login') }}" variant="secondary-muted" size="lg">Ver o dashboard</x-hb.button>
         </div>
-        <p class="mt-4 text-xs text-[#414858]">Grátis pra sempre no plano básico · Sem cartão</p>
+        <p class="mt-5 text-xs" style="color:#323a50">Grátis pra sempre no plano básico · 2 minutos pra configurar</p>
     </div>
 </section>
 
