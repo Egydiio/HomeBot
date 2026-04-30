@@ -34,7 +34,7 @@ new class extends Component
 };
 ?>
 
-<div class="hb-page max-w-[1000px]"
+<div class="hb-page"
      x-data
      @print-report.window="window.print()"
      @copy-link.window="navigator.clipboard.writeText($event.detail.url).then(() => { $dispatch('toast', { msg: 'Link copiado!' }) })">
