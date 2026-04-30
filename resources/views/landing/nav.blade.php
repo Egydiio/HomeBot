@@ -12,8 +12,8 @@
         </a>
 
         <div class="hidden flex-1 items-center gap-8 md:flex">
-            <a href="#como-funciona" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">Como funciona</a>
-            <a href="#beneficios" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">Benefícios</a>
+            <a href="#como" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">Como funciona</a>
+            <a href="#quem" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">Para quem</a>
             <a href="#preco" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">Preço</a>
             <a href="#faq" class="text-sm text-[#737a8a] transition-colors hover:text-[#eef0f5]">FAQ</a>
         </div>
@@ -49,8 +49,8 @@
         class="border-b border-[#1d2028] bg-[#0f1114] px-4 py-4 md:hidden"
     >
         <div class="hb-landing-container space-y-3">
-            <a @click="mobileMenu = false" href="#como-funciona" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">Como funciona</a>
-            <a @click="mobileMenu = false" href="#beneficios" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">Benefícios</a>
+            <a @click="mobileMenu = false" href="#como" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">Como funciona</a>
+            <a @click="mobileMenu = false" href="#quem" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">Para quem</a>
             <a @click="mobileMenu = false" href="#preco" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">Preço</a>
             <a @click="mobileMenu = false" href="#faq" class="block text-sm text-[#737a8a] hover:text-[#eef0f5]">FAQ</a>
             <div class="flex gap-2 border-t border-[#1d2028] pt-3">

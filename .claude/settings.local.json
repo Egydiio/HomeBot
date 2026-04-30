@@ -31,7 +31,11 @@
       "Bash(git -C /home/egydio/Projetos/HomeBot branch -a)",
       "Bash(git -C /home/egydio/Projetos/HomeBot checkout develop)",
       "Bash(git -C /home/egydio/Projetos/HomeBot pull origin develop)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(cp /root/.claude/projects/-home-user-HomeBot/3654fc4e-d2e3-4c49-b568-3c83d129b706/tool-results/webfetch-1777395805179-r0e8vd.bin /tmp/design.bin)",
+      "Read(//tmp/**)",
+      "Bash(zcat /tmp/design.bin)",
+      "Bash(gunzip -c /tmp/design.bin)"
     ]
   }
 }

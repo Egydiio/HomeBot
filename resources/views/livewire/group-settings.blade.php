@@ -109,7 +109,7 @@ new class extends Component
 };
 ?>
 
-<div class="hb-page max-w-[980px]"
+<div class="hb-page"
      x-data="{ confirmReset: false, confirmDelete: false }">
 
     <div class="mb-6">

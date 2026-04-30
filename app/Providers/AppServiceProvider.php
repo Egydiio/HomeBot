@@ -55,6 +55,24 @@ class AppServiceProvider extends ServiceProvider
                     ->latest()
                     ->take(3)
                     ->get(),
+                'layoutMemberBalances' => (function () use ($group): array {
+                    if (!$group) return [];
+                    $members = $group->members()->where('active', true)->get();
+                    if ($members->isEmpty()) return [];
+                    $totals = Transaction::where('group_id', $group->id)
+                        ->where('reference_month', now()->startOfMonth())
+                        ->selectRaw('member_id, SUM(house_amount) as paid')
+                        ->groupBy('member_id')
+                        ->pluck('paid', 'member_id');
+                    $allPaid = $totals->sum();
+                    $share = $allPaid / max(1, $members->count());
+                    return $members->map(fn ($m) => [
+                        'name'     => $m->name,
+                        'initials' => strtoupper(substr($m->name, 0, 1)),
+                        'paid'     => (float) ($totals[$m->id] ?? 0),
+                        'diff'     => (float) ($totals[$m->id] ?? 0) - $share,
+                    ])->all();
+                })(),
             ]);
         });
     }

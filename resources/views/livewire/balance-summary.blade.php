@@ -95,7 +95,7 @@ new class extends Component {
 };
 ?>
 
-<div class="hb-page max-w-[1100px]">
+<div class="hb-page">
 
     {{-- Pix Modal --}}
     @if($showPixModal)
