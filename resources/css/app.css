@@ -623,6 +623,32 @@
     .hb-reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s ease, transform .6s ease; }
     .hb-reveal.in { opacity: 1; transform: translateY(0); }
 
+    /* ── DASHBOARD V2 ──────────────────────────────────── */
+
+    .hb-saldo-hero {
+        position: relative; overflow: hidden;
+        background: #0c0f14;
+        border: 1px solid rgba(31,204,138,0.22);
+        border-radius: 16px;
+        padding: 28px 32px;
+    }
+
+    .hb-saldo-hero::before {
+        content: '';
+        position: absolute; inset: 0;
+        background: linear-gradient(135deg, rgba(31,204,138,0.06) 0%, transparent 55%);
+        pointer-events: none;
+    }
+
+    .hb-saldo-amount {
+        font-family: 'DM Mono', monospace;
+        font-size: 52px;
+        font-weight: 500;
+        color: #1fcc8a;
+        letter-spacing: -0.04em;
+        line-height: 1;
+    }
+
     /* Section headers for v2 */
     .hb-s-eye { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #1fcc8a; margin-bottom: 12px; }
     .hb-s-h2 { font-size: clamp(28px, 3.2vw, 44px); font-weight: 700; letter-spacing: -.045em; line-height: 1.1; color: #edf0f8; text-wrap: balance; margin-bottom: 14px; }

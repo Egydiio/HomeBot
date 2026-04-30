@@ -139,54 +139,76 @@ new class extends Component {
         </p>
     </div>
 
-    <section class="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article class="hb-card-soft hb-card-body">
-            <div class="flex justify-between items-start mb-3">
-                <div class="hb-label">
-                    {{ ($this->netBalance > 0 && $this->creditMember) ? 'Saldo a receber' : 'Saldo do mês' }}
+    {{-- Saldo hero --}}
+    <div class="hb-saldo-hero mb-5">
+        <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <div class="hb-label mb-3">
+                    {{ ($netBalance > 0 && $creditMember) ? 'Saldo a receber' : 'Saldo do mês' }}
                 </div>
-                @include('partials.icon', ['name' => 'wallet', 'size' => 15, 'color' => '#414858'])
+                <div class="hb-saldo-amount">
+                    R$ {{ number_format($netBalance, 2, ',', '.') }}
+                </div>
+                <div class="mt-2 text-[13px] text-[#5d6880]">
+                    @if($creditMember && $debtMember)
+                        <span class="text-[#1fcc8a]">{{ $debtMember['name'] }}</span> deve para {{ $creditMember['name'] }}
+                    @else
+                        Contas em dia — nenhuma transferência necessária
+                    @endif
+                </div>
             </div>
-            <div class="mb-1.5 font-mono text-2xl font-medium text-[#1fcc8a]">
-                R$ {{ number_format($netBalance, 2, ',', '.') }}
+            @if($creditMember && $debtMember)
+            <div class="flex items-center gap-2.5 sm:flex-col sm:items-end sm:gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(31,204,138,0.27)] bg-[rgba(31,204,138,0.13)] text-[11px] font-bold text-[#1fcc8a]">
+                        {{ strtoupper(substr($creditMember['name'], 0, 1)) }}
+                    </div>
+                    <div>
+                        <div class="text-[12px] font-medium text-[#eef0f5]">{{ $creditMember['name'] }}</div>
+                        <div class="text-[10.5px] text-[#414858]">pagou mais</div>
+                    </div>
+                </div>
+                <a href="{{ route('balance') }}" class="hb-button-primary whitespace-nowrap text-xs px-4 py-2">
+                    <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2L2 10l8 8 8-8-8-8zm0 3.4L15.6 11 10 16.6 4.4 11 10 5.4z"/></svg>
+                    Cobrar via Pix
+                </a>
             </div>
-            <div class="text-xs text-[#1fcc8a]">
-                @if($creditMember && $debtMember) {{ $debtMember['name'] }} te deve @else Em dia @endif
-            </div>
-        </article>
+            @endif
+        </div>
+    </div>
 
+    {{-- 3 stat cards --}}
+    <section class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <article class="hb-card hb-card-body">
-            <div class="flex justify-between items-start mb-3">
-                <div class="hb-label">Despesas do mês</div>
-                @include('partials.icon', ['name' => 'chart', 'size' => 15, 'color' => '#414858'])
+            <div class="flex justify-between items-start mb-2.5">
+                <div class="hb-label">Despesas da casa</div>
+                @include('partials.icon', ['name' => 'chart', 'size' => 14, 'color' => '#2e3244'])
             </div>
-            <div class="mb-1.5 font-mono text-2xl font-medium text-[#eef0f5]">
+            <div class="font-mono text-[22px] font-medium text-[#eef0f5]">
                 R$ {{ number_format($totalHouseMonth, 2, ',', '.') }}
             </div>
-            <div class="hb-muted">{{ $totalTransactions }} transações este mês</div>
+            <div class="hb-muted mt-1">{{ $totalTransactions }} transações este mês</div>
         </article>
 
         <article class="hb-card hb-card-body">
-            <div class="flex justify-between items-start mb-3">
+            <div class="flex justify-between items-start mb-2.5">
                 <div class="hb-label">Notas processadas</div>
-                @include('partials.icon', ['name' => 'scan', 'size' => 15, 'color' => '#414858'])
+                @include('partials.icon', ['name' => 'scan', 'size' => 14, 'color' => '#2e3244'])
             </div>
-            <div class="mb-1.5 font-mono text-2xl font-medium text-[#eef0f5]">
-                {{ $processedCount }}
-            </div>
-            <div class="hb-muted">Este mês via WhatsApp</div>
+            <div class="font-mono text-[22px] font-medium text-[#eef0f5]">{{ $processedCount }}</div>
+            <div class="hb-muted mt-1">Este mês via WhatsApp</div>
         </article>
 
-        <article class="rounded-xl p-5 border {{ $pendingCount > 0 ? 'border-[rgba(245,161,0,0.22)] bg-[rgba(245,161,0,0.07)]' : 'border-[#1d2028] bg-[#131517]' }}">
-            <div class="flex justify-between items-start mb-3">
+        <article class="hb-card hb-card-body {{ $pendingCount > 0 ? 'border-[rgba(245,161,0,0.22)] bg-[rgba(245,161,0,0.06)]' : '' }}">
+            <div class="flex justify-between items-start mb-2.5">
                 <div class="hb-label">Pix pendente</div>
-                @include('partials.icon', ['name' => 'pix', 'size' => 15, 'color' => '#414858'])
+                @include('partials.icon', ['name' => 'pix', 'size' => 14, 'color' => '#2e3244'])
             </div>
-            <div class="mb-1.5 font-mono text-2xl font-medium {{ $pendingCount > 0 ? 'text-[#f5a100]' : 'text-[#eef0f5]' }}">
+            <div class="font-mono text-[22px] font-medium {{ $pendingCount > 0 ? 'text-[#f5a100]' : 'text-[#eef0f5]' }}">
                 @if($pendingTransaction) R$ {{ number_format($pendingTransaction->total_amount, 2, ',', '.') }} @else R$ 0,00 @endif
             </div>
-            <div class="text-xs {{ $pendingCount > 0 ? 'text-[#f5a100]' : 'text-[#737a8a]' }}">
-                @if($pendingCount > 0 && $pendingTransaction) {{ \Illuminate\Support\Str::limit($pendingTransaction->description, 20) }} @else Nenhum pendente @endif
+            <div class="mt-1 text-[11px] {{ $pendingCount > 0 ? 'text-[#f5a100]' : 'text-[#737a8a]' }}">
+                @if($pendingCount > 0 && $pendingTransaction) {{ \Illuminate\Support\Str::limit($pendingTransaction->description, 22) }} @else Nenhum pendente @endif
             </div>
         </article>
     </section>
